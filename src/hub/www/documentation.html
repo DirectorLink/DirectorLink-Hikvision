@@ -88,7 +88,7 @@
   <tr><td>Ignored Cameras</td><td>Cameras Add New Cameras skips: a camera IP (also its NVR channel), <code>192.168.50.10/3</code> for one NVR channel, or an NVR IP for all its channels.</td></tr>
   <tr><td>Alerts</td><td>Master alerts switch (same as the tile).</td></tr>
   <tr><td>Default Alert On</td><td>The Alert On setting given to new cameras: any detection, people and vehicles, or people only.</td></tr>
-  <tr><td>Snapshot With Alerts</td><td>Keep a snapshot of the alerting camera for notifications (1280 px wide when the camera can scale its pictures).</td></tr>
+  <tr><td>Snapshot With Alerts</td><td>Keep a snapshot of the alerting camera for notifications (1280 px wide when the camera can scale its pictures, else its sub stream picture).</td></tr>
   <tr><td>Check For Updates</td><td>Off (default). On: once a day the hub asks GitHub for the latest release and shows it next to <i>Driver Version</i>. Nothing about this home is sent.</td></tr>
   <tr><td>Log Level</td><td>Debug output to the Lua tab.</td></tr>
 </table>
@@ -130,7 +130,7 @@
 <h2>Change log</h2>
 <table>
   <tr><th>Version</th><th>Changes</th></tr>
-  <tr><td>1.0.3</td><td>Snapshots at the size each screen asks for; lighter notification pictures; NVR channels whose camera is disconnected are not added; H.264 waits for an offline NVR channel; optional update check.</td></tr>
+  <tr><td>1.0.4</td><td>Snapshots at the size each screen asks for; lighter notification pictures; NVR channels whose camera is disconnected are not added; H.264 waits for an offline NVR channel; the "older camera driver" notice clears by itself; optional update check.</td></tr>
   <tr><td>1.0.2</td><td>First release.</td></tr>
 </table>
 

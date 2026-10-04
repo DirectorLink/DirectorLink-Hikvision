@@ -209,6 +209,22 @@ UpdateTile = function(force)
 	pcall(function() C4:SendToProxy(TILE_PROXY, "ICON_CHANGED", { icon = icon, icon_description = desc }, "NOTIFY") end)
 end
 
+-- Cameras still running another camera driver version than the hub (cleared as soon as they report the same)
+function OldCameraDrivers()
+	if DRIVER_SEMVER == "dev" then return nil end
+	local old, version = {}, nil
+	for _, c in ipairs(CameraList()) do
+		if c.version and c.version ~= "dev" and c.version ~= DRIVER_SEMVER then
+			old[#old + 1] = c.name or ("#" .. c.id)
+			version = c.version
+		end
+	end
+	if #old == 0 then return nil end
+	local who = #old == 1 and ("Camera '" .. old[1] .. "' runs") or (#old .. " cameras run")
+	return who .. " camera driver " .. version .. "; the hub is " .. DRIVER_SEMVER .. ". Update " .. CAMERA_DRIVER
+		.. " with Driver > Add or Update Driver"
+end
+
 UpdateSummary = function()
 	local list, active, online, disabled = Counts()
 	SetVar("CAMERAS_TOTAL", #list)
@@ -238,6 +254,8 @@ UpdateSummary = function()
 		status = "Setup: enter the camera Username and Password below, then run Actions > Search Network"
 	elseif #refused > 0 then
 		status = "Login failed on " .. table.concat(refused, ", ") .. " - check the Username and Password (NVR Username/Password for an NVR)"
+	elseif OldCameraDrivers() then
+		status = OldCameraDrivers()
 	elseif gState.message then
 		status = gState.message
 	elseif #list == 0 then
@@ -854,10 +872,6 @@ local function CameraStatus(p)
 		c.loginSentAt = os.time()
 		LogInfo("Camera '%s' has no login: sending the hub's login", tostring(c.name))
 		ConfigureCamera(id)
-	end
-	if p.VERSION and DRIVER_SEMVER ~= "dev" and p.VERSION ~= DRIVER_SEMVER and p.VERSION ~= "dev" then
-		SetMessage("Camera '" .. tostring(c.name) .. "' runs camera driver " .. tostring(p.VERSION) .. "; the hub is " .. DRIVER_SEMVER
-			.. ". Update " .. CAMERA_DRIVER .. " with Driver > Add or Update Driver")
 	end
 	if c.disabled then
 		c.online = nil

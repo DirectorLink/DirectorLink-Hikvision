@@ -405,7 +405,8 @@ d.timers()
 q = d.call("UIRequest", "GET_SNAPSHOT_QUERY_STRING", d.table({"SIZE_X": "320", "SIZE_Y": "180"}))
 check(q == "<snapshot_query_string>ISAPI/Streaming/channels/102/picture</snapshot_query_string>",
       f"a camera that ignores sizes keeps whole stream pictures ({q})")
-check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/101/picture"), "... and the main picture for notifications")
+check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/102/picture"),
+      "... and the light sub stream picture for notifications, not the 4K one")
 
 # ---------------------------------------------------------------- requests to one camera run one at a time
 d = Driver("camera", camera())

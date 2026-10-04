@@ -829,9 +829,14 @@ local function SnapshotSizeFor(reqW)
 	return nil
 end
 
--- Notifications: a phone-sized picture when the camera can scale, else the main stream
+-- Notifications: a phone-sized picture when the camera can scale. Otherwise the sub stream picture
+-- (a few dozen KB) when it is at least 640 px wide, rather than a main stream picture that is often over 1 MB
 local function NotificationSnapshotPath()
-	return SnapshotPath(1, SnapshotSizeFor(NOTIFICATION_WIDTH))
+	local size = SnapshotSizeFor(NOTIFICATION_WIDTH)
+	if size then return SnapshotPath(1, size) end
+	local sub = gInfo.streams[2]
+	if gInfo.plainSnapshot and not gInfo.snapshotMainOnly and sub and (sub.width or 0) >= 640 then return SnapshotPath(2) end
+	return SnapshotPath(1)
 end
 
 CaptureEventSnapshot = function()
@@ -1319,7 +1324,7 @@ Refresh = function()
 			try()
 		end,
 		function(nextStep) -- 3b. can the camera scale its pictures? Small tiles then cost a few KB, not a full-size JPEG
-			gInfo.snapshotSizes = {}
+			gInfo.snapshotSizes, gInfo.scaleNote = {}, nil
 			if gState.channelOffline or not gInfo.plainSnapshot then return nextStep() end
 			local ratio = 9 / 16
 			local main = gInfo.streams[1]
@@ -1342,7 +1347,8 @@ Refresh = function()
 					end
 					-- The camera ignores or refuses sizes: whole stream pictures, as before
 					if i == 1 then
-						LogInfo("Snapshots: the camera does not scale pictures (%s)", jw and (jw .. " px wide") or ResponseError(code, body, err))
+						gInfo.scaleNote = jw and ("it ignores the requested size and sends " .. jw .. " px") or ("it refuses it: " .. ResponseError(code, body, err))
+						LogInfo("Snapshots: the camera does not scale pictures (%s)", gInfo.scaleNote)
 					end
 					nextStep()
 				end, { timeout = 15 })
@@ -1570,7 +1576,7 @@ local function PrintReport()
 	if ps then sizes[#sizes + 1] = string.format("stream %d: %sx%s %s", ps.n, tostring(ps.w or "?"), tostring(ps.h or "?"), kb(ps.bytes)) end
 	for _, s in ipairs(gInfo.snapshotSizes or {}) do sizes[#sizes + 1] = string.format("%dx%d %s", s.w, s.h, kb(s.bytes)) end
 	lines[#lines + 1] = "Snapshot size : " .. (#sizes > 0 and table.concat(sizes, "  -  ") or "not measured")
-		.. ((#(gInfo.snapshotSizes or {}) == 0 and ps) and "  (the camera does not scale pictures)" or "")
+		.. ((#(gInfo.snapshotSizes or {}) == 0 and ps) and ("  (the camera does not scale pictures: " .. tostring(gInfo.scaleNote or "not tested") .. ")") or "")
 	if #H264Streams() == 0 and next(gInfo.streams) ~= nil then
 		lines[#lines + 1] = "NOTE          : no H.264 stream - Control4 cannot play H.265. Run Actions > Set Sub Stream To H.264"
 	end
@@ -1601,6 +1607,18 @@ local ACTIONS = {
 				end
 			end, { force = true })
 		end
+		local probe = "/" .. SnapshotPath(1, { w = 320, h = 180 })
+		Isapi(gCam, "GET", probe, nil, function(code, body, err)
+			local w, h
+			if code == 200 and IsJpeg(body) then w, h = JpegSize(body) end
+			if w and w <= 352 then
+				print(string.format("Snapshot resize OK: the camera scales pictures (%dx%d, %d KB)", w, h or 0, math.floor(#body / 1024 + 0.5)))
+			elseif w then
+				print(string.format("Snapshot resize: the camera ignores the requested size and sends %dx%d - tiles use the sub stream", w, h or 0))
+			else
+				print("Snapshot resize: the camera refuses it (" .. ResponseError(code, body, err) .. ") - tiles use the sub stream")
+			end
+		end, { force = true })
 	end,
 	Report = PrintReport,
 	Reboot = RebootCamera,

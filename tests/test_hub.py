@@ -230,6 +230,8 @@ d.call("OnPropertyChanged", "Ignored Cameras")
 d.clear()
 d.call("ExecuteCommand", "DL_CAMERA_STATUS", d.table({"DEVICE_ID": "1001", "NAME": "Pool", "ONLINE": "1", "VERSION": "0.8.0"}))
 check("runs camera driver 0.8.0" in d.prop("Status"), f"version mismatch explained ({d.prop('Status')})")
+d.call("ExecuteCommand", "DL_CAMERA_STATUS", d.table({"DEVICE_ID": "1001", "NAME": "Pool", "ONLINE": "1", "VERSION": "test"}))
+check("camera driver" not in d.prop("Status"), f"the notice clears once the camera runs the same version ({d.prop('Status')})")
 
 # ---------------------------------------------------------------- a login that does not work never adds cameras
 d = hub()

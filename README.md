@@ -157,7 +157,7 @@ The camera view itself (video, snapshots, PTZ arrows) is drawn by Control4. PTZ 
 - **Variables:** `ALERTS_ENABLED` `ALERT_ACTIVE` `ALL_ONLINE` (BOOL) · `CAMERAS_TOTAL` `CAMERAS_ONLINE` (NUMBER) · `LAST_ALERT_CAMERA` `LAST_ALERT_TYPE` `LAST_ALERT_TIME` `LAST_OFFLINE_CAMERA` (STRING)
 - **Conditionals:** Camera alerts are On/Off · An alert is Active/Clear · All cameras are Online · Last alert is &lt;type&gt;
 - **Commands:** `SET_ALERTS` (On/Off/Toggle) · `SNOOZE_ALERTS` (minutes) · `SEARCH_NETWORK`
-- **Notification attachments:** snapshot from the camera that raised the alert · live snapshot from that camera (1280 px wide when the camera can scale its pictures, else the main stream)
+- **Notification attachments:** snapshot from the camera that raised the alert · live snapshot from that camera (1280 px wide when the camera can scale its pictures, else the sub stream picture when it is at least 640 px wide)
 
 **Hikvision Camera**
 
