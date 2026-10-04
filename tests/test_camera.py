@@ -407,6 +407,12 @@ check(q == "<snapshot_query_string>ISAPI/Streaming/channels/102/picture</snapsho
       f"a camera that ignores sizes keeps whole stream pictures ({q})")
 check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/102/picture"),
       "... and the light sub stream picture for notifications, not the 4K one")
+d.run("PRINTED = {}; print = function(s) PRINTED[#PRINTED + 1] = s end")
+d.call("ExecuteCommand", "LUA_ACTION", d.table({"ACTION": "TestSnapshot"}))
+printed = list(d.g.PRINTED.values())
+note = [l for l in printed if l.startswith("Snapshot notification")]
+check(note and "/102/picture" in note[0] and "640x360" in note[0], f"Test Snapshot checks the picture notifications really use ({note})")
+check(any(l.startswith("Snapshot resize: the camera ignores") for l in printed), "Test Snapshot says the camera ignores the requested size")
 
 # ---------------------------------------------------------------- requests to one camera run one at a time
 d = Driver("camera", camera())

@@ -1595,9 +1595,14 @@ local ACTIONS = {
 		ConfigChanged()
 	end,
 	TestSnapshot = function()
-		for _, req in ipairs({ { "tile", 320 }, { "notification", NOTIFICATION_WIDTH }, { "full screen", 0 } }) do
-			local size = req[2] > 0 and SnapshotSizeFor(req[2]) or nil
-			local path = "/" .. (size and SnapshotPath(1, size) or SnapshotPath(req[2] > 0 and PickSnapshotStream(req[2]) or 1))
+		local tile = SnapshotSizeFor(320)
+		local pictures = {
+			{ "tile", tile and SnapshotPath(1, tile) or SnapshotPath(PickSnapshotStream(320)) },
+			{ "notification", NotificationSnapshotPath() },
+			{ "full screen", SnapshotPath(1) },
+		}
+		for _, req in ipairs(pictures) do
+			local path = "/" .. req[2]
 			Isapi(gCam, "GET", path, nil, function(code, body, err)
 				if code == 200 and IsJpeg(body) then
 					local w, h = JpegSize(body)
