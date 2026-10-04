@@ -79,7 +79,7 @@
   <tr><th>Property</th><th>Description</th></tr>
   <tr><td>Status</td><td>What the hub is doing and what to do next, in plain language.</td></tr>
   <tr><td>Cameras</td><td>Cameras in the project, how many are online or disabled, which are offline, have a login problem, or have no H.264 video.</td></tr>
-  <tr><td>Found On Network</td><td>Result of the last search: cameras, NVRs, how many are not added yet or ignored, cameras that still need activating.</td></tr>
+  <tr><td>Found On Network</td><td>Result of the last search: cameras, NVRs, how many are not added yet or ignored, NVR channels whose camera is disconnected (added when they reconnect), cameras that still need activating.</td></tr>
   <tr><td>Username / Password</td><td>The login used for every camera.</td></tr>
   <tr><td>NVR Username / Password</td><td>Only if the NVR uses a different login. Used to read the NVR's camera names, and for cameras that are only reachable through the NVR.</td></tr>
   <tr><td>Camera Names</td><td>Automatic (default): the name of an existing Control4 camera with the same IP, else the NVR channel name, else the camera's on-screen name, else model and IP. Or only the camera's own name, or model and IP.</td></tr>
@@ -88,7 +88,8 @@
   <tr><td>Ignored Cameras</td><td>Cameras Add New Cameras skips: a camera IP (also its NVR channel), <code>192.168.50.10/3</code> for one NVR channel, or an NVR IP for all its channels.</td></tr>
   <tr><td>Alerts</td><td>Master alerts switch (same as the tile).</td></tr>
   <tr><td>Default Alert On</td><td>The Alert On setting given to new cameras: any detection, people and vehicles, or people only.</td></tr>
-  <tr><td>Snapshot With Alerts</td><td>Keep a snapshot of the alerting camera for notifications.</td></tr>
+  <tr><td>Snapshot With Alerts</td><td>Keep a snapshot of the alerting camera for notifications (1280 px wide when the camera can scale its pictures).</td></tr>
+  <tr><td>Check For Updates</td><td>Off (default). On: once a day the hub asks GitHub for the latest release and shows it next to <i>Driver Version</i>. Nothing about this home is sent.</td></tr>
   <tr><td>Log Level</td><td>Debug output to the Lua tab.</td></tr>
 </table>
 
@@ -129,6 +130,7 @@
 <h2>Change log</h2>
 <table>
   <tr><th>Version</th><th>Changes</th></tr>
+  <tr><td>1.0.3</td><td>Snapshots at the size each screen asks for; lighter notification pictures; NVR channels whose camera is disconnected are not added; H.264 waits for an offline NVR channel; optional update check.</td></tr>
   <tr><td>1.0.2</td><td>First release.</td></tr>
 </table>
 

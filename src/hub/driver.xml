@@ -181,6 +181,11 @@
 
 			<property><name>Advanced Section</name><type>LABEL</type><default>Advanced</default></property>
 			<property>
+				<name>Check For Updates</name><type>LIST</type><readonly>false</readonly><default>Off</default>
+				<items><item>Off</item><item>On</item></items>
+				<tooltip>On: once a day the hub asks GitHub for the latest DirectorLink · Hikvision release and shows it next to Driver Version. Nothing about this home is sent.</tooltip>
+			</property>
+			<property>
 				<name>Log Level</name><type>LIST</type><readonly>false</readonly><default>Warnings</default>
 				<items><item>Off</item><item>Errors</item><item>Warnings</item><item>Info</item><item>Debug</item><item>Trace</item></items>
 			</property>

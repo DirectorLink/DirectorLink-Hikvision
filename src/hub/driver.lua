@@ -396,7 +396,20 @@ local function ReadRecorderChannels(done)
 				LogWarn("Could not read the channels of NVR %s (%s)", d.ip, tostring(code))
 			end
 			gChannels[d.ip] = list
-			nextRecorder()
+			if #list == 0 then return nextRecorder() end
+			-- Which channels have their camera connected (older NVRs may not say)
+			Isapi(TargetFor(d.ip, d.port, true), "GET", "/ISAPI/ContentMgmt/InputProxy/channels/status", nil, function(c2, b2)
+				if c2 == 200 then
+					local online = {}
+					for _, st in ipairs(XmlFindAll(XmlParse(b2), "InputProxyChannelStatus")) do
+						local id = tonumber(string.match(XmlChildValue(st, "id") or "", "%d+") or "")
+						local v = XmlChildValue(st, "online")
+						if id and v then online[id] = toboolean(v) end
+					end
+					for _, ch in ipairs(list) do ch.offline = (online[ch.id] == false) or nil end
+				end
+				nextRecorder()
+			end, { timeout = 15 })
 		end, { timeout = 15 })
 	end
 	nextRecorder()
@@ -480,14 +493,17 @@ function BuildCandidates()
 		for _, ch in ipairs(list) do
 			if not (ch.ip and gFound[ch.ip]) then
 				candidates[#candidates + 1] = { address = nvrIp, port = nvr and nvr.port or 80, channel = ch.id, model = ch.model,
-					nvrName = (not IsGenericCameraName(ch.name)) and ch.name or nil, viaNvr = true, cameraIp = ch.ip }
+					nvrName = (not IsGenericCameraName(ch.name)) and ch.name or nil, viaNvr = true, cameraIp = ch.ip, offline = ch.offline }
 			end
 		end
 	end
-	local new, ignored, skip = {}, 0, IgnoredCameras()
+	-- Not offered: cameras already in the project, ignored ones, and NVR channels whose camera is disconnected
+	local new, ignored, offline, skip = {}, 0, 0, IgnoredCameras()
 	for _, c in ipairs(candidates) do
 		if not InProject(c.address, c.channel) then
-			if IsIgnored(c, skip) then ignored = ignored + 1 else new[#new + 1] = c end
+			if IsIgnored(c, skip) then ignored = ignored + 1
+			elseif c.offline then offline = offline + 1
+			else new[#new + 1] = c end
 		end
 	end
 	local function ipKey(c)
@@ -495,7 +511,7 @@ function BuildCandidates()
 		return string.format("%03d%03d%03d%03d%04d", tonumber(a) or 0, tonumber(b) or 0, tonumber(c3) or 0, tonumber(d4) or 0, c.channel or 1)
 	end
 	table.sort(new, function(x, y) return ipKey(x) < ipKey(y) end)
-	return new, candidates, ignored
+	return new, candidates, ignored, offline
 end
 
 -- "Found On Network", kept current as cameras are added, deleted or ignored
@@ -506,11 +522,12 @@ UpdateFoundSummary = function()
 		if d.activated == false then inactive = inactive + 1
 		elseif d.recorder then recs = recs + 1 else cams = cams + 1 end
 	end
-	local new, _, ignored = BuildCandidates()
+	local new, _, ignored, offline = BuildCandidates()
 	local found = cams .. " camera" .. (cams == 1 and "" or "s")
 	if recs > 0 then found = found .. ", " .. recs .. " NVR" .. (recs == 1 and "" or "s") end
 	found = found .. " - " .. #new .. " not added yet"
 	if ignored > 0 then found = found .. " - " .. ignored .. " ignored" end
+	if offline > 0 then found = found .. " - " .. offline .. " offline on the NVR (added when they reconnect)" end
 	if inactive > 0 then found = found .. " - " .. inactive .. " not activated (activate with Hikvision SADP)" end
 	UpdateProperty("Found On Network", found)
 	return found, new, cams, recs
@@ -786,10 +803,15 @@ end
 --[[=============================================================================
     Messages from camera drivers
 ===============================================================================]]
+-- Phone-sized when the camera can scale its pictures (the camera reports the path), else the main stream
+local function NotificationPath(c)
+	return "/" .. (c.snapshotPath or ("ISAPI/Streaming/channels/" .. ((tonumber(c.channel) or 1) * 100 + 1) .. "/picture"))
+end
+
 local function FetchAlertSnapshot(c)
 	if (Properties["Snapshot With Alerts"] or "Yes") ~= "Yes" or not c.address then return end
 	local t = TargetFor(c.address, c.port, c.viaNvr)
-	local path = "/ISAPI/Streaming/channels/" .. ((tonumber(c.channel) or 1) * 100 + 1) .. "/picture"
+	local path = NotificationPath(c)
 	Isapi(t, "GET", path, nil, function(code, body)
 		if code == 200 and IsJpeg(body) then gState.alertSnapshot = body end
 	end, { timeout = 10 })
@@ -824,6 +846,7 @@ local function CameraStatus(p)
 	c.noAnswer = nil
 	c.version = p.VERSION
 	if p.DISABLED then c.disabled = p.DISABLED == "1" end
+	if p.SNAPSHOT and p.SNAPSHOT ~= "" then c.snapshotPath = p.SNAPSHOT end
 	if p.H264 then c.noH264 = p.H264 == "0" end
 	-- A camera the hub added that lost its login (for example after its driver was reinstalled) gets it again
 	if p.NEED_LOGIN == "1" and c.managed and c.address and (Properties["Password"] or "") ~= ""
@@ -890,6 +913,66 @@ local function SubStreamsToH264()
 	SetMessage("Asked " .. n .. " camera" .. (n == 1 and "" or "s") .. " to set the sub stream to H.264 - each camera's Video line shows the result", 120000)
 end
 
+--[[=============================================================================
+    Update check (opt-in, property "Check For Updates"): once a day the hub asks
+    GitHub for the latest release and shows it next to Driver Version.
+===============================================================================]]
+local RELEASES_API = "https://api.github.com/repos/IsraelCIL/DirectorLink-Hikvision/releases/latest"
+
+local function VersionNumber(v)
+	local a, b, c = string.match(tostring(v or ""), "^v?(%d+)%.(%d+)%.(%d+)")
+	if not a then return nil end
+	return tonumber(a) * 10000 + tonumber(b) * 100 + tonumber(c)
+end
+
+local function ShowDriverVersion()
+	local build = ""
+	pcall(function() build = tostring(C4:GetDriverConfigInfo("version") or "") end)
+	local text = DRIVER_SEMVER ~= "dev" and (DRIVER_SEMVER .. " (" .. build .. ")") or build
+	local latest = gState.latestVersion
+	if latest and (VersionNumber(latest) or 0) > (VersionNumber(DRIVER_SEMVER) or 0) then
+		text = text .. " - update available: " .. latest .. " (directorlink.io/drivers/hikvision)"
+	end
+	UpdateProperty("Driver Version", text)
+end
+
+local function UpdateChecksOn()
+	return (Properties["Check For Updates"] or "Off") == "On"
+end
+
+function CheckForUpdates()
+	if not UpdateChecksOn() then
+		gState.latestVersion = nil
+		return ShowDriverVersion()
+	end
+	pcall(function()
+		local x = C4:url()
+		x:SetOptions({ fail_on_error = false, timeout = 20, connect_timeout = 10 })
+		x:OnDone(function(_, responses)
+			local resp = responses and responses[#responses]
+			if resp and tonumber(resp.code) == 200 then
+				local tag = string.match(resp.body or "", '"tag_name"%s*:%s*"([^"]+)"')
+				if tag then
+					gState.latestVersion = (string.gsub(tag, "^v", ""))
+					LogInfo("Latest release: %s (this driver: %s)", gState.latestVersion, DRIVER_SEMVER)
+				end
+			else
+				LogDebug("Update check failed (%s)", resp and tostring(resp.code) or "no answer")
+			end
+			ShowDriverVersion()
+		end)
+		x:Get(RELEASES_API, { ["User-Agent"] = UserAgent(), ["Accept"] = "application/vnd.github+json" })
+	end)
+end
+
+local function ScheduleUpdateChecks()
+	if UpdateChecksOn() then
+		SetTimer("UPDATE_CHECK", 24 * 3600 * 1000, CheckForUpdates, true)
+	else
+		KillTimer("UPDATE_CHECK")
+	end
+end
+
 local function ApplyLoginToAll()
 	local n = 0
 	for id, c in pairs(gCameras) do
@@ -911,10 +994,16 @@ local function PrintCameraList()
 			c.disabled and "DISABLED" or (c.online == true and "online" or (c.online == false and "OFFLINE" or "?")), c.loginFailed and "LOGIN FAILED " or "",
 			c.noH264 and "NO H.264 VIDEO " or "", c.managed and "" or "(added manually)")
 	end
-	local new, _, ignored = BuildCandidates()
-	lines[#lines + 1] = "--- on the network, not added yet (" .. #new .. ")" .. (ignored > 0 and (", " .. ignored .. " ignored") or "") .. " ---"
+	local new, all, ignored, offline = BuildCandidates()
+	lines[#lines + 1] = "--- on the network, not added yet (" .. #new .. ")" .. (ignored > 0 and (", " .. ignored .. " ignored") or "")
+		.. (offline > 0 and (", " .. offline .. " offline on the NVR") or "") .. " ---"
 	for _, c in ipairs(new) do
 		lines[#lines + 1] = string.format("%-16s ch%-3s %-24s %s", c.address, tostring(c.channel), tostring(c.model), c.nvrName and ("NVR name: " .. c.nvrName) or "")
+	end
+	for _, c in ipairs(all) do
+		if c.offline and not InProject(c.address, c.channel) then
+			lines[#lines + 1] = string.format("OFFLINE ON THE NVR: %s ch%s %s", c.address, tostring(c.channel), tostring(c.nvrName or c.model or ""))
+		end
 	end
 	for _, d in pairs(gFound) do
 		if d.activated == false then lines[#lines + 1] = "NOT ACTIVATED (activate it with Hikvision SADP first): " .. d.ip .. " " .. d.model end
@@ -968,10 +1057,9 @@ end
 
 function OnDriverLateInit()
 	ApplyLogSettings()
-	pcall(function()
-		local build = tostring(C4:GetDriverConfigInfo("version") or "")
-		UpdateProperty("Driver Version", DRIVER_SEMVER ~= "dev" and (DRIVER_SEMVER .. " (" .. build .. ")") or build)
-	end)
+	ShowDriverVersion()
+	ScheduleUpdateChecks()
+	if UpdateChecksOn() then SetTimer("UPDATE_CHECK_FIRST", 60000, CheckForUpdates) end
 	AlertsChanged("startup")
 	UpdateTile(true)
 	HelloCameras()
@@ -1005,6 +1093,9 @@ function OnPropertyChanged(name)
 		UpdateFoundSummary()
 	elseif name == "Sub Stream To H.264" then
 		if AutoH264() then SubStreamsToH264() end
+	elseif name == "Check For Updates" then
+		ScheduleUpdateChecks()
+		CheckForUpdates()
 	end
 end
 
@@ -1062,7 +1153,7 @@ function GetNotificationAttachmentURL()
 	for _, c in pairs(gCameras) do
 		if c.name == gState.lastAlertCamera and c.address then
 			local t = TargetFor(c.address, c.port, c.viaNvr)
-			return TargetBaseUrl(t, true) .. "/ISAPI/Streaming/channels/" .. ((tonumber(c.channel) or 1) * 100 + 1) .. "/picture"
+			return TargetBaseUrl(t, true) .. NotificationPath(c)
 		end
 	end
 	return ""

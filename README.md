@@ -19,7 +19,7 @@ Made by [DirectorLink](https://directorlink.io), the open-source management laye
 | Feature | Control4 app | Programming |
 |---|---|---|
 | Find and add every camera | Nothing to do: cameras appear in their rooms, named | Hub actions: Search Network, Add New Cameras |
-| Live video and snapshots | Camera view. The driver picks the H.264 stream that fits each screen | — |
+| Live video and snapshots | Camera view. The driver picks the H.264 stream that fits each screen, and snapshots at the size each screen asks for (a grid tile gets a small picture, not a 4K one) | — |
 | Detections: motion, person, vehicle, line crossing, intrusion, region entrance/exit, tamper, scene change, face, object left/removed, alarm inputs, PIR | — | Events, variables, conditionals and contacts on each camera |
 | Alerts for people: any detection, people and vehicles, or people only | Notifications with a snapshot | *Alert* (camera) and *Camera Alert* (hub) events, `LAST_ALERT_*` variables |
 | One alerts tile for the home | Tap to turn alerts on or off. The icon shows alert, off, snoozed or a camera offline | `SET_ALERTS`, `SNOOZE_ALERTS`, *Alerts On/Off* events |
@@ -103,7 +103,7 @@ The camera view itself (video, snapshots, PTZ arrows) is drawn by Control4. PTZ 
 
 ### Special cases
 
-- **NVRs:** the hub reads the NVR's channel list, with the login or a separate **NVR Username/Password**. Cameras that are also on the network directly are connected directly and named after their NVR channel. Cameras reachable only through the NVR are added as NVR channels. Such a camera shows as offline when the NVR reports its channel as disconnected.
+- **NVRs:** the hub reads the NVR's channel list, with the login or a separate **NVR Username/Password**. Cameras that are also on the network directly are connected directly and named after their NVR channel. Cameras reachable only through the NVR are added as NVR channels. A channel whose camera is disconnected from the NVR is not added (**Found On Network** counts it) until it reconnects. A camera already added shows as offline when its channel disconnects.
 - **Other subnets and VLANs:** discovery doesn't cross routers. List those cameras in the hub's **Extra Camera IPs** (`10.0.5.20, 10.0.5.21:8080`) and run **Search Network**.
 - **New cameras later:** run **Search Network** and **Add New Cameras** again. Only new ones are added.
 - **Not activated:** brand-new cameras must get a password first, with Hikvision SADP or their web page. The hub lists them as *not activated*.
@@ -125,6 +125,7 @@ The camera view itself (video, snapshots, PTZ arrows) is drawn by Control4. PTZ 
 | Ignored Cameras | Cameras **Add New Cameras** skips: a camera IP, `NVR IP/channel`, or an NVR IP for all its channels |
 | Sub Stream To H.264 | Automatic (default): cameras the hub adds switch their sub stream to H.264, so Control4 can play them. Choosing Automatic also applies it to cameras already added. Off: leave the cameras as they are. |
 | Alerts · Default Alert On · Snapshot With Alerts | Master switch; Alert On for new cameras; snapshot for notifications |
+| Check For Updates | Off (default). On: once a day the hub asks GitHub for the latest release and shows it next to **Driver Version**. Nothing about the home is sent. |
 
 **Actions:** Search Network · Add New Cameras · Update Camera Names · Apply Login To All Cameras · Set All Sub Streams To H.264 · Camera List
 
@@ -156,7 +157,7 @@ The camera view itself (video, snapshots, PTZ arrows) is drawn by Control4. PTZ 
 - **Variables:** `ALERTS_ENABLED` `ALERT_ACTIVE` `ALL_ONLINE` (BOOL) · `CAMERAS_TOTAL` `CAMERAS_ONLINE` (NUMBER) · `LAST_ALERT_CAMERA` `LAST_ALERT_TYPE` `LAST_ALERT_TIME` `LAST_OFFLINE_CAMERA` (STRING)
 - **Conditionals:** Camera alerts are On/Off · An alert is Active/Clear · All cameras are Online · Last alert is &lt;type&gt;
 - **Commands:** `SET_ALERTS` (On/Off/Toggle) · `SNOOZE_ALERTS` (minutes) · `SEARCH_NETWORK`
-- **Notification attachments:** snapshot from the camera that raised the alert · live snapshot from that camera
+- **Notification attachments:** snapshot from the camera that raised the alert · live snapshot from that camera (1280 px wide when the camera can scale its pictures, else the main stream)
 
 **Hikvision Camera**
 
@@ -191,7 +192,7 @@ For details, run **Setup Report** on a camera or **Camera List** on the hub, and
 
 ## Privacy
 
-The driver talks only to the Hikvision cameras and NVRs on your home network. It sends nothing to DirectorLink and collects no usage data.
+The driver talks only to the Hikvision cameras and NVRs on your home network, and to GitHub once a day if you turn on **Check For Updates** (off by default). It sends nothing to DirectorLink and collects no usage data.
 
 Camera logins stay in your Control4 project. Reports and logs never show passwords.
 
@@ -223,7 +224,7 @@ python tools/build.py            # -> dist/DirectorLink-Hikvision.c4z, dist/Dire
 
 `build.py` puts `src/common/*.lua` in front of each driver's `driver.lua` and stamps the version from `VERSION` (`1.0.0` → driver version `10000`, `1.2.3` → `10203`) and the build date into the packaged copies.
 
-The tests run the real driver code in Lua 5.1. HTTP is answered in-process, and every Digest `Authorization` header is checked with RFC 2617 math. They cover discovery, NVR naming, adding and configuring cameras, the camera Properties page, a lost login, disabled and ignored cameras, offline NVR channels, master alerts, the alert filter, Extras, stream selection, the H.264 switch, the event stream parser, request queuing and the one-failed-login guarantee.
+The tests run the real driver code in Lua 5.1. HTTP is answered in-process, and every Digest `Authorization` header is checked with RFC 2617 math. They cover discovery, NVR naming, adding and configuring cameras, the camera Properties page, a lost login, disabled and ignored cameras, offline NVR channels, snapshot sizes, the update check, master alerts, the alert filter, Extras, stream selection, the H.264 switch, the event stream parser, request queuing and the one-failed-login guarantee.
 
 **How it works**
 
@@ -231,7 +232,7 @@ The tests run the real driver code in Lua 5.1. HTTP is answered in-process, and 
 - **Adding:** `C4:AddDevice("DirectorLink-Hikvision-Camera.c4z", room, name, callback)`. The new camera then receives `DL_CONFIGURE` through `C4:SendToDevice`, which is not logged because it carries the password.
 - **Camera Properties page:** address, ports and login live on Control4's camera page. Edits there reach the driver as `SET_ADDRESS`, `SET_HTTP_PORT`, `SET_RTSP_PORT`, `SET_USERNAME`, `SET_PASSWORD`, and the driver re-reads the page (`GET_PROPERTIES`) on every refresh. The page never shows the login back, so the driver keeps its own copy (password encrypted with `C4:PersistSetValue`). The hub writes the page with the same commands Composer uses; a hub-added camera that has no login asks the hub for it.
 - **Hub ↔ camera messages:** `DL_CONFIGURE`, `DL_HUB_ALERTS`, `DL_HUB_HELLO`, `DL_FIX_SUBSTREAM` (hub → camera); `DL_CAMERA_STATUS`, `DL_CAMERA_ALERT` (camera → hub).
-- **Video:** `GET_SNAPSHOT_QUERY_STRING` and `GET_RTSP_H264_QUERY_STRING` return `ISAPI/Streaming/channels/<ch>0<n>/picture` and `Streaming/Channels/<ch>0<n>`, choosing an H.264 stream that fits the requested width.
+- **Video:** `GET_SNAPSHOT_QUERY_STRING` and `GET_RTSP_H264_QUERY_STRING` return `ISAPI/Streaming/channels/<ch>0<n>/picture` and `Streaming/Channels/<ch>0<n>`, choosing an H.264 stream that fits the requested width. When the camera can scale its pictures (tested once per refresh), snapshots add `?videoResolutionWidth=…&videoResolutionHeight=…` (320, 640 or 1280 px wide) so each screen gets the size it asks for.
 - **Events:** a TCP connection (`C4:CreateTCPClient`) to `/ISAPI/Event/notification/alertStream` with Digest login, chunked and multipart decoding, a `videoloss` heartbeat, a 120 s silence watchdog, and reconnects with 5–60 s backoff.
 - **Requests** identify themselves with the User-Agent `DirectorLink-Hikvision/<version>` (hub) or `DirectorLink-Hikvision-Camera/<version>` (camera).
 

@@ -115,6 +115,7 @@ local function SaveCfg()
 		C4:PersistSetValue("DL_CFG", {
 			host = gCfg.host, port = gCfg.httpPort, httpsPort = gCfg.httpsPort, https = gCfg.https, rtspPort = gCfg.rtspPort,
 			user = gCfg.user, name = gCfg.name, hubId = gCfg.hubId, hubAlerts = gCfg.hubAlerts, snoozeUntil = gCfg.snoozeUntil,
+			h264Pending = gCfg.h264Pending,
 		})
 		-- Director refuses to encrypt an empty value
 		if (gCfg.pass or "") ~= "" then
@@ -139,6 +140,7 @@ local function LoadCfg()
 			gCfg.hubId = tonumber(t.hubId)
 			gCfg.hubAlerts = (t.hubAlerts ~= false)
 			gCfg.snoozeUntil = tonumber(t.snoozeUntil) or 0
+			gCfg.h264Pending = t.h264Pending == true
 		end
 		local p = C4:PersistGetValue("DL_PASS", true)
 		if type(p) == "string" then gCfg.pass = p end
@@ -189,7 +191,7 @@ end
     Status, attention and the hub link
 ===============================================================================]]
 local gStream -- forward
-local Refresh, Stream_Start, Stream_Stop, UpdateExtras, ReportToHub -- forward
+local Refresh, Stream_Start, Stream_Stop, UpdateExtras, ReportToHub, SetSubStreamH264 -- forward
 
 local function CameraName()
 	if gCfg.name ~= "" then return gCfg.name end
@@ -552,6 +554,7 @@ end
 -- An NVR channel can be offline while the NVR itself answers: ask the NVR about the channel
 local function SetChannelOffline(off)
 	if gState.channelOffline == off then return end
+	local wasOffline = gState.channelOffline == true
 	gState.channelOffline = off
 	if off then
 		LogWarn("The camera on NVR channel %d is offline", Channel())
@@ -559,6 +562,10 @@ local function SetChannelOffline(off)
 		SetAttention("snapshot", nil)
 	else
 		SetAttention("channel", nil)
+		if wasOffline then
+			LogInfo("The camera on NVR channel %d is back", Channel())
+			SetTimer("REFRESH", 2000, function() Refresh() end) -- streams, snapshots and anything that waited
+		end
 	end
 end
 
@@ -801,15 +808,37 @@ end
 --[[=============================================================================
     Snapshots and stream selection for Navigators
 ===============================================================================]]
-local function SnapshotPath(n)
-	return gInfo.snapshotBase .. StreamId(n) .. "/picture"
+-- Picture sizes offered when the camera can scale its snapshots (each one tested at refresh)
+local SNAPSHOT_WIDTHS = { 320, 640, 1280 }
+local NOTIFICATION_WIDTH = 1280
+
+-- size = { w, h }: ask the camera to scale the picture (Hikvision videoResolutionWidth/Height)
+local function SnapshotPath(n, size)
+	local p = gInfo.snapshotBase .. StreamId(n) .. "/picture"
+	if size then p = p .. "?videoResolutionWidth=" .. size.w .. "&videoResolutionHeight=" .. size.h end
+	return p
+end
+
+-- The smallest tested size that covers the requested width; nil = a whole stream picture
+local function SnapshotSizeFor(reqW)
+	reqW = tonumber(reqW) or 0
+	if reqW <= 0 then return nil end
+	for _, s in ipairs(gInfo.snapshotSizes or {}) do
+		if s.w >= reqW * 0.9 then return s end
+	end
+	return nil
+end
+
+-- Notifications: a phone-sized picture when the camera can scale, else the main stream
+local function NotificationSnapshotPath()
+	return SnapshotPath(1, SnapshotSizeFor(NOTIFICATION_WIDTH))
 end
 
 CaptureEventSnapshot = function()
 	if (Properties["Snapshot With Alerts"] or "Yes") ~= "Yes" then return end
 	if os.time() - gState.lastSnapshotAt < 5 then return end
 	gState.lastSnapshotAt = os.time()
-	Isapi(gCam, "GET", "/" .. SnapshotPath(1), nil, function(code, body)
+	Isapi(gCam, "GET", "/" .. NotificationSnapshotPath(), nil, function(code, body)
 		if code == 200 and IsJpeg(body) then
 			gState.eventSnapshot = body
 			LogDebug("Alert snapshot captured (%d bytes)", #body)
@@ -866,7 +895,8 @@ end
 UI_REQ = {}
 
 UI_REQ.GET_SNAPSHOT_QUERY_STRING = function(tParams)
-	local q = SnapshotPath(PickSnapshotStream(tParams.SIZE_X))
+	local size = (Properties["Video Quality"] or "Auto") == "Auto" and SnapshotSizeFor(tParams.SIZE_X) or nil
+	local q = size and SnapshotPath(1, size) or SnapshotPath(PickSnapshotStream(tParams.SIZE_X))
 	LogRequest("GET_SNAPSHOT_QUERY_STRING -> " .. q, tParams)
 	return "<snapshot_query_string>" .. XmlEscape(q) .. "</snapshot_query_string>"
 end
@@ -1083,6 +1113,7 @@ ReportToHub = function(force)
 		ADDRESS = gCam.host, PORT = gCfg.httpPort, CHANNEL = Channel(),
 		ONLINE = gState.online == true and "1" or (gState.online == false and "0" or ""),
 		DISABLED = CameraEnabled() and "0" or "1",
+		SNAPSHOT = NotificationSnapshotPath(),
 		NEED_LOGIN = HasLogin() and "0" or "1",
 		H264 = next(gInfo.streams) == nil and "" or (#H264Streams() > 0 and "1" or "0"),
 		LOGIN_FAILED = gCam.authFailed and "1" or "0",
@@ -1090,7 +1121,7 @@ ReportToHub = function(force)
 		ALERTS = (Properties["Alerts"] or "On") == "On" and "1" or "0",
 		MODEL = gInfo.model, STATUS = Properties["Status"] or "", VERSION = DRIVER_SEMVER,
 	}
-	local sig = table.concat({ p.NAME, p.ADDRESS, p.PORT, p.CHANNEL, p.ONLINE, p.DISABLED, p.NEED_LOGIN, p.H264, p.LOGIN_FAILED, p.ALERT_ACTIVE, p.ALERTS, p.MODEL, p.STATUS }, "|")
+	local sig = table.concat({ p.NAME, p.ADDRESS, p.PORT, p.CHANNEL, p.ONLINE, p.DISABLED, p.SNAPSHOT, p.NEED_LOGIN, p.H264, p.LOGIN_FAILED, p.ALERT_ACTIVE, p.ALERTS, p.MODEL, p.STATUS }, "|")
 	if sig == gState.lastHubReport and not force then return end
 	gState.lastHubReport = sig
 	SendToDriver(gCfg.hubId, "DL_CAMERA_STATUS", p)
@@ -1252,6 +1283,7 @@ Refresh = function()
 			end)
 		end,
 		function(nextStep) -- 3. snapshots: sub stream, else main stream; NVRs may need the streaming proxy path
+			gInfo.plainSnapshot = nil
 			local bases = { "ISAPI/Streaming/channels/" }
 			if gInfo.isRecorder then bases[2] = "ISAPI/ContentMgmt/StreamingProxy/channels/" end
 			local tries = {}
@@ -1273,6 +1305,8 @@ Refresh = function()
 				end
 				Isapi(gCam, "GET", "/" .. t[1] .. StreamId(t[2]) .. "/picture", nil, function(code, body, err)
 					if code == 200 and IsJpeg(body) then
+						local w, h = JpegSize(body)
+						gInfo.plainSnapshot = { n = t[2], w = w, h = h, bytes = #body }
 						gInfo.snapshotBase, gInfo.snapshotMainOnly = t[1], (t[2] == 1)
 						if t[2] == 1 and gInfo.streams[2] then LogInfo("Snapshots come from the main stream (the sub stream gives none)") end
 						SetAttention("snapshot", nil)
@@ -1283,6 +1317,37 @@ Refresh = function()
 				end, { timeout = 15 })
 			end
 			try()
+		end,
+		function(nextStep) -- 3b. can the camera scale its pictures? Small tiles then cost a few KB, not a full-size JPEG
+			gInfo.snapshotSizes = {}
+			if gState.channelOffline or not gInfo.plainSnapshot then return nextStep() end
+			local ratio = 9 / 16
+			local main = gInfo.streams[1]
+			if main and main.width and main.height and main.width > 0 then
+				local r = main.height / main.width
+				if math.abs(r - 0.75) < math.abs(r - 0.5625) then ratio = 3 / 4 end
+			end
+			local i = 0
+			local function nextSize()
+				i = i + 1
+				local w = SNAPSHOT_WIDTHS[i]
+				if not w then return nextStep() end
+				local size = { w = w, h = math.floor(w * ratio + 0.5) }
+				Isapi(gCam, "GET", "/" .. SnapshotPath(1, size), nil, function(code, body, err)
+					local jw = (code == 200 and IsJpeg(body)) and JpegSize(body) or nil
+					if jw and jw <= size.w * 1.1 then
+						size.bytes = #body
+						gInfo.snapshotSizes[#gInfo.snapshotSizes + 1] = size
+						return nextSize()
+					end
+					-- The camera ignores or refuses sizes: whole stream pictures, as before
+					if i == 1 then
+						LogInfo("Snapshots: the camera does not scale pictures (%s)", jw and (jw .. " px wide") or ResponseError(code, body, err))
+					end
+					nextStep()
+				end, { timeout = 15 })
+			end
+			nextSize()
 		end,
 		function(nextStep) -- 4. which detections notify Control4
 			Isapi(gCam, "GET", "/ISAPI/Event/triggers", nil, function(code, body)
@@ -1384,6 +1449,15 @@ Refresh = function()
 		UpdateExtras()
 		if not gStream.connected then Stream_Start() end
 		UpdateStatus()
+		if gCfg.h264Pending then
+			if gState.channelOffline then
+				LogInfo("Sub stream: H.264 will be set when the camera on NVR channel %d is back", Channel())
+			else
+				gCfg.h264Pending = false
+				SaveCfg()
+				SetSubStreamH264()
+			end
+		end
 	end)
 end
 
@@ -1426,7 +1500,7 @@ end
     Control4 touchscreens and the app play H.264 only. The main stream can stay
     H.265 (recording); the sub stream is switched to H.264 for Control4.
 ===============================================================================]]
-local function SetSubStreamH264(done)
+SetSubStreamH264 = function(done)
 	done = done or function() end
 	local path = "/ISAPI/Streaming/channels/" .. StreamId(2)
 	local function result(ok, msg, reason)
@@ -1489,7 +1563,14 @@ local function PrintReport()
 		if s then lines[#lines + 1] = string.format("Stream %d      : %s (%d)%s", n, StreamDescription(s), s.id, IsH264(s) and "" or "  not playable on touchscreens") end
 	end
 	lines[#lines + 1] = "Video URL     : rtsp://" .. gCam.host .. ":" .. gCfg.rtspPort .. "/Streaming/Channels/" .. StreamId(PickVideoStream(1920)) .. " (full screen)"
-	lines[#lines + 1] = "Snapshot URL  : " .. TargetBaseUrl(gCam) .. "/" .. SnapshotPath(PickSnapshotStream(320)) .. " (tiles)"
+	lines[#lines + 1] = "Snapshot URL  : " .. TargetBaseUrl(gCam) .. "/" .. (SnapshotSizeFor(320) and SnapshotPath(1, SnapshotSizeFor(320)) or SnapshotPath(PickSnapshotStream(320))) .. " (tiles)"
+	local function kb(b) return b and (b >= 1048576 and string.format("%.1f MB", b / 1048576) or string.format("%d KB", math.floor(b / 1024 + 0.5))) or "?" end
+	local ps = gInfo.plainSnapshot
+	local sizes = {}
+	if ps then sizes[#sizes + 1] = string.format("stream %d: %sx%s %s", ps.n, tostring(ps.w or "?"), tostring(ps.h or "?"), kb(ps.bytes)) end
+	for _, s in ipairs(gInfo.snapshotSizes or {}) do sizes[#sizes + 1] = string.format("%dx%d %s", s.w, s.h, kb(s.bytes)) end
+	lines[#lines + 1] = "Snapshot size : " .. (#sizes > 0 and table.concat(sizes, "  -  ") or "not measured")
+		.. ((#(gInfo.snapshotSizes or {}) == 0 and ps) and "  (the camera does not scale pictures)" or "")
 	if #H264Streams() == 0 and next(gInfo.streams) ~= nil then
 		lines[#lines + 1] = "NOTE          : no H.264 stream - Control4 cannot play H.265. Run Actions > Set Sub Stream To H.264"
 	end
@@ -1508,11 +1589,18 @@ local ACTIONS = {
 		ConfigChanged()
 	end,
 	TestSnapshot = function()
-		local path = "/" .. SnapshotPath(1)
-		Isapi(gCam, "GET", path, nil, function(code, body, err)
-			if code == 200 and IsJpeg(body) then print(string.format("Snapshot OK: %s (%d bytes)", path, #body))
-			else print("Snapshot FAILED: " .. path .. " -> " .. ResponseError(code, body, err)) end
-		end, { force = true })
+		for _, req in ipairs({ { "tile", 320 }, { "notification", NOTIFICATION_WIDTH }, { "full screen", 0 } }) do
+			local size = req[2] > 0 and SnapshotSizeFor(req[2]) or nil
+			local path = "/" .. (size and SnapshotPath(1, size) or SnapshotPath(req[2] > 0 and PickSnapshotStream(req[2]) or 1))
+			Isapi(gCam, "GET", path, nil, function(code, body, err)
+				if code == 200 and IsJpeg(body) then
+					local w, h = JpegSize(body)
+					print(string.format("Snapshot %s OK: %s - %sx%s, %d KB", req[1], path, tostring(w or "?"), tostring(h or "?"), math.floor(#body / 1024 + 0.5)))
+				else
+					print("Snapshot " .. req[1] .. " FAILED: " .. path .. " -> " .. ResponseError(code, body, err))
+				end
+			end, { force = true })
+		end
 	end,
 	Report = PrintReport,
 	Reboot = RebootCamera,
@@ -1551,6 +1639,8 @@ local COMMANDS = {
 		if p.ALERT_ON and ALERT_FILTERS[p.ALERT_ON] then UpdateProperty("Alert On", p.ALERT_ON) end
 		if p.USERNAME then gCfg.user = p.USERNAME end
 		if p.PASSWORD then gCfg.pass = p.PASSWORD end
+		-- Hub setting "Sub Stream To H.264" = Automatic: done when the next refresh finishes
+		if p.FIX_SUBSTREAM == "1" then gCfg.h264Pending = true end
 		if p.NAME and p.NAME ~= "" then
 			gCfg.name = p.NAME
 			if p.RENAME == "1" then
@@ -1567,8 +1657,6 @@ local COMMANDS = {
 		AlertsChanged("hub")
 		gState.lastHubReport = nil
 		ConfigChanged()
-		-- Hub setting "Sub Stream To H.264" = Automatic: make the video playable on Control4
-		if p.FIX_SUBSTREAM == "1" then SetTimer("AUTO_H264", 6000, function() SetSubStreamH264() end) end
 	end,
 	DL_HUB_ALERTS = function(p)
 		gCfg.hubId = tonumber(p.HUB_ID) or gCfg.hubId
@@ -1837,7 +1925,7 @@ end
 
 -- Notification attachments
 function GetNotificationAttachmentURL()
-	return TargetBaseUrl(gCam, true) .. "/" .. SnapshotPath(1)
+	return TargetBaseUrl(gCam, true) .. "/" .. NotificationSnapshotPath()
 end
 
 function GetNotificationAttachmentBytes()

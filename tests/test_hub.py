@@ -28,7 +28,14 @@ def probe_match(ip, model, port=80, digital=1, activated="true"):
             f"<DigitalChannelNum>{digital}</DigitalChannelNum>\n<SoftwareVersion>V5.7.15</SoftwareVersion>\n<Activated>{activated}</Activated>\n</ProbeMatch>\n")
 
 
+NVR_STATUS = {"xml": None}
+GITHUB = {"calls": 0}
+
+
 def network(method, url, headers, body):
+    if url.startswith("https://api.github.com/"):
+        GITHUB["calls"] += 1
+        return 200, {}, '{"tag_name": "v9.9.9", "name": "DirectorLink"}'
     if not digest_ok(method, headers.get("Authorization")):
         return 401, {"WWW-Authenticate": 'Digest realm="NVR", qop="auth", nonce="abc123", stale="FALSE"'}, ""
     if url == "http://192.168.50.80:90/ISAPI/ContentMgmt/InputProxy/channels":
@@ -37,6 +44,8 @@ def network(method, url, headers, body):
         return 200, {}, (f"<InputProxyChannelList {NS}>" + ch(1, "Garden", "192.168.50.81", "DS-2CD2087G2-L")
                          + ch(2, "Gate", "192.168.50.82", "DS-2CD2347G2H-LISU/SL") + ch(3, "Pool", "192.168.254.3", "DS-2CD2143G2-I")
                          + ch(4, "Camera 04", "192.168.254.4", "DS-2CD1043G0-I") + "</InputProxyChannelList>")
+    if url == "http://192.168.50.80:90/ISAPI/ContentMgmt/InputProxy/channels/status" and NVR_STATUS["xml"]:
+        return 200, {}, NVR_STATUS["xml"]
     if url.endswith("/ISAPI/System/deviceInfo"):
         return 200, {}, f"<DeviceInfo {NS}><deviceName>IP CAMERA</deviceName><model>X</model></DeviceInfo>"
     if url == "http://192.168.50.83/ISAPI/System/Video/inputs/channels/1":
@@ -167,6 +176,10 @@ check([p.get("icon") for _, c, p in d.proxy("ICON_CHANGED")] == ["alert"], "tile
 check(len(d.call("GetNotificationAttachmentBytes")) > 0, "notification snapshot fetched from the alerting camera")
 check(d.call("GetNotificationAttachmentURL").startswith("http://admin:Secr3t%21pw@192.168.50.81/ISAPI/Streaming/channels/101/picture"), "live snapshot URL of the alerting camera")
 check(d.call("TestCondition", "LAST_ALERT_TYPE", d.table({"VALUE": "Person", "LOGIC": "EQUAL"})) is True, "conditional Last alert = Person")
+d.call("ExecuteCommand", "DL_CAMERA_STATUS", d.table({"DEVICE_ID": "1003", "ONLINE": "1",
+                                                     "SNAPSHOT": "ISAPI/Streaming/channels/101/picture?videoResolutionWidth=1280&videoResolutionHeight=720"}))
+check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/101/picture?videoResolutionWidth=1280&videoResolutionHeight=720"),
+      "notification picture: the phone-sized picture the camera reports")
 
 # ---------------------------------------------------------------- master alerts: tile tap
 d.timers()
@@ -226,6 +239,30 @@ d.clear()
 d.call("ExecuteCommand", "LUA_ACTION", d.table({"ACTION": "AddCameras"}))
 check(len(list(d.g.ADDED.values())) == 0, "wrong password: no camera is added")
 check(d.prop("Status").startswith("Login failed on 192.168.50.80"), f"status names the device that refused the login ({d.prop('Status')})")
+
+# ---------------------------------------------------------------- NVR channels whose camera is disconnected are not offered
+NVR_STATUS["xml"] = (f"<InputProxyChannelStatusList {NS}><InputProxyChannelStatus><id>3</id><online>true</online></InputProxyChannelStatus>"
+                     "<InputProxyChannelStatus><id>4</id><online>false</online></InputProxyChannelStatus></InputProxyChannelStatusList>")
+d = hub()
+discover(d)
+c = [(x.address, x.channel) for x in d.call("BuildCandidates")[0].values()]
+check(("192.168.50.80", 4) not in c and ("192.168.50.80", 3) in c, f"dead NVR channel skipped, live one offered ({c})")
+check("- 1 offline on the NVR" in d.prop("Found On Network"), f"Found On Network says so ({d.prop('Found On Network')})")
+NVR_STATUS["xml"] = None
+
+# ---------------------------------------------------------------- update check: off unless turned on
+GITHUB["calls"] = 0
+d = hub()
+d.timers()
+check(GITHUB["calls"] == 0 and "update" not in d.prop("Driver Version"), "Check For Updates is off by default: GitHub is never contacted")
+d.g.Properties["Check For Updates"] = "On"
+d.call("OnPropertyChanged", "Check For Updates")
+gh = [e for e in d.g.HTTP_LOG.values() if e["url"].startswith("https://api.github.com/")]
+check(GITHUB["calls"] == 1 and gh and gh[0]["ua"] == "DirectorLink-Hikvision/test", "turned on: one request, with the hub User-Agent")
+check("update available: 9.9.9" in d.prop("Driver Version"), f"Driver Version shows the newer release ({d.prop('Driver Version')})")
+d.g.Properties["Check For Updates"] = "Off"
+d.call("OnPropertyChanged", "Check For Updates")
+check("update" not in d.prop("Driver Version") and GITHUB["calls"] == 1, "turned off again: no request, no notice")
 
 # ---------------------------------------------------------------- failures are explained
 d = hub()

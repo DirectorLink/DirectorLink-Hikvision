@@ -286,6 +286,27 @@ function IsJpeg(body)
 	return type(body) == "string" and string.sub(body, 1, 2) == "\255\216"
 end
 
+-- Width and height from a JPEG's frame header (nil when not found)
+function JpegSize(data)
+	if not IsJpeg(data) then return nil end
+	local i, n = 3, #data
+	while i + 8 <= n do
+		if string.byte(data, i) ~= 0xFF then return nil end
+		local marker = string.byte(data, i + 1)
+		if marker == 0xFF then
+			i = i + 1 -- fill byte
+		else
+			if marker >= 0xC0 and marker <= 0xCF and marker ~= 0xC4 and marker ~= 0xC8 and marker ~= 0xCC then
+				local h = string.byte(data, i + 5) * 256 + string.byte(data, i + 6)
+				local w = string.byte(data, i + 7) * 256 + string.byte(data, i + 8)
+				return w, h
+			end
+			i = i + 2 + string.byte(data, i + 2) * 256 + string.byte(data, i + 3)
+		end
+	end
+	return nil
+end
+
 -- GET a document, replace fields, PUT it back. changes = { { tag, value }, ... }
 function ReadModifyWrite(t, path, changes, label, cb)
 	Isapi(t, "GET", path, nil, function(code, body, err)

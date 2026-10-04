@@ -16,4 +16,4 @@ Only the [latest release](../../releases/latest) gets security fixes.
 
 ## Scope
 
-The drivers run on the Control4 controller and talk only to Hikvision cameras and NVRs on the home network. They store the camera login in the Control4 project and never log it.
+The drivers run on the Control4 controller and talk only to Hikvision cameras and NVRs on the home network, plus GitHub's release API once a day if **Check For Updates** is turned on. They store the camera login in the Control4 project and never log it.

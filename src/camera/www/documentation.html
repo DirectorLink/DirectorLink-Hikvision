@@ -74,7 +74,7 @@
   <tr><td>Camera</td><td>Motion detection on/off &middot; Day / night &middot; Light (Smart, IR, White light, Off; on cameras that have one)</td></tr>
   <tr><td>Maintenance</td><td>Reboot the camera</td></tr>
 </table>
-<p class="muted">Video picks the H.264 stream that fits each screen; Control4 cannot play H.265. Snapshots work with any codec.</p>
+<p class="muted">Video picks the H.264 stream that fits each screen; Control4 cannot play H.265. Snapshots work with any codec and, when the camera can scale its pictures, come at the size each screen asks for. <i>Setup Report</i> shows the measured sizes.</p>
 
 <h2>Properties</h2>
 <table>
@@ -105,11 +105,12 @@
 <h3>Contacts (Connections &gt; Control)</h3>
 <p>Alert, Motion, Person, Vehicle, Line Crossing, Intrusion, Tamper, Alarm Input. Bind them to Control4 Motion Sensor or Contact Sensor devices.</p>
 <h3>Actions</h3>
-<p>Reconnect &middot; Test Snapshot &middot; Set Sub Stream To H.264 (Control4 cannot play H.265; the main stream is left alone) &middot; Setup Report (everything on one page, in the Lua tab) &middot; Reboot Camera.</p>
+<p>Reconnect &middot; Test Snapshot (tile, notification and full-screen pictures, with their size) &middot; Set Sub Stream To H.264 (Control4 cannot play H.265; the main stream is left alone) &middot; Setup Report (everything on one page, in the Lua tab) &middot; Reboot Camera.</p>
 
 <h2>Change log</h2>
 <table>
   <tr><th>Version</th><th>Changes</th></tr>
+  <tr><td>1.0.3</td><td>Snapshots at the size each screen asks for; lighter notification pictures; H.264 waits for an offline NVR channel.</td></tr>
   <tr><td>1.0.2</td><td>First release.</td></tr>
 </table>
 

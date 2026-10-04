@@ -24,7 +24,14 @@ def digest_ok(method, auth, password=PASS):
     return f["response"] == md5(f"{ha1}:{f['nonce']}:{f['nc']}:{f['cnonce']}:{f['qop']}:{ha2}")
 
 
-def camera(password=PASS, rtsp=10554, sub="H.264", sub_picture=True, put_ok=True):
+def jpeg(w, h, pad=0):
+    """Smallest JPEG the driver can measure: SOI, APP0, SOF0 (dimensions), padding, EOI."""
+    return (b"\xff\xd8" + b"\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            + b"\xff\xc0\x00\x11\x08" + h.to_bytes(2, "big") + w.to_bytes(2, "big") + b"\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01"
+            + b"\x00" * pad + b"\xff\xd9")
+
+
+def camera(password=PASS, rtsp=10554, sub="H.264", sub_picture=True, put_ok=True, resize=None):
     """Responder playing a Digest-protected camera (main H.265, sub H.264 unless told otherwise)."""
     calls = {"n": 0, "sub": sub, "put": None}
 
@@ -45,6 +52,14 @@ def camera(password=PASS, rtsp=10554, sub="H.264", sub_picture=True, put_ok=True
             calls["put"] = body
             calls["sub"] = re.search(r"<videoCodecType>([^<]*)</videoCodecType>", body).group(1)
             return 200, {}, f"<ResponseStatus {NS}><statusCode>1</statusCode><statusString>OK</statusString></ResponseStatus>"
+        if "/picture?" in path and resize == "scale":
+            q = dict(re.findall(r"(\w+)=(\d+)", path.split("?", 1)[1]))
+            w, h = int(q["videoResolutionWidth"]), int(q["videoResolutionHeight"])
+            return 200, {}, jpeg(w, h, pad=w * h // 100)
+        if "/picture?" in path and resize == "ignore":
+            return 200, {}, jpeg(3840, 2160, pad=80000)
+        if path.endswith("/picture") and resize:
+            return 200, {}, (jpeg(3840, 2160, pad=80000) if "/101/" in path else jpeg(640, 360, pad=2300))
         if path == "/ISAPI/Streaming/channels/102/picture" and not sub_picture:
             return 503, {}, f"<ResponseStatus {NS}><statusCode>3</statusCode><subStatusCode>deviceBusy</subStatusCode></ResponseStatus>"
         if path == "/ISAPI/System/deviceInfo":
@@ -344,21 +359,53 @@ def nvr(method, url, headers, body):
                          "</InputProxyChannelStatusList>")
     if path.endswith("/picture"):
         return 503, {}, f"<ResponseStatus {NS}><statusCode>3</statusCode><subStatusCode>serviceUnavailable</subStatusCode></ResponseStatus>"
+    if path == "/ISAPI/Streaming/channels/302" and method == "GET":
+        return 200, {}, (f"<StreamingChannel {NS}><id>302</id><Video><videoCodecType>H.265</videoCodecType><videoResolutionWidth>640</videoResolutionWidth>"
+                         "<videoResolutionHeight>360</videoResolutionHeight><H265Profile>Main</H265Profile></Video></StreamingChannel>")
+    if path == "/ISAPI/Streaming/channels/302" and method == "PUT":
+        nvr_state["put"] = body
+        return 200, {}, f"<ResponseStatus {NS}><statusCode>1</statusCode></ResponseStatus>"
     return 404, {}, f"<ResponseStatus {NS}><statusCode>4</statusCode><subStatusCode>notSupport</subStatusCode></ResponseStatus>"
 
 
 d = started(nvr)
 d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.80", "HTTP_PORT": "8080", "CHANNEL": "3",
-                                                  "USERNAME": USER, "PASSWORD": PASS, "NAME": "Side Gate"}))
-d.timers()
+                                                  "USERNAME": USER, "PASSWORD": PASS, "NAME": "Side Gate", "FIX_SUBSTREAM": "1"}))
+d.timers(); d.timers()
+check("put" not in nvr_state, "H.264 is not attempted while the NVR channel's camera is offline")
 check(d.prop("Status") == "Offline - the camera on NVR channel 3 is not connected to the NVR", f"offline NVR channel shown as offline ({d.prop('Status')})")
 check("NVR channel 3 is offline" in d.prop("Attention") and "snapshot" not in d.prop("Attention"), f"Attention explains it once ({d.prop('Attention')})")
 check(d.device_cmds("DL_CAMERA_STATUS", 500)[-1][2].get("ONLINE") == "0", "the hub is told the camera is offline")
 d.clear()
 nvr_state["online"] = "true"
 d.run("for _, t in ipairs(TIMERS) do if t.active and t.rep then t.fn(t) end end")  # health check
-check(d.prop("Status").startswith("Online") and "Camera Online" in d.events() and d.prop("Attention") == "",
+check(d.prop("Status").startswith("Online") and "Camera Online" in d.events() and "is offline" not in d.prop("Attention"),
       f"the camera reconnects to the NVR: online again ({d.prop('Status')})")
+d.timers()
+check("<videoCodecType>H.264</videoCodecType>" in nvr_state.get("put", ""), "the waiting H.264 switch runs once the camera is back")
+
+# ---------------------------------------------------------------- snapshots sized to the request
+d = started(camera(resize="scale"))
+d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.81", "USERNAME": USER, "PASSWORD": PASS}))
+d.timers()
+check(tuple(d.call("JpegSize", jpeg(1280, 720))) == (1280, 720), "JPEG dimensions read from the frame header")
+q = d.call("UIRequest", "GET_SNAPSHOT_QUERY_STRING", d.table({"SIZE_X": "320", "SIZE_Y": "180"}))
+check(q == "<snapshot_query_string>ISAPI/Streaming/channels/101/picture?videoResolutionWidth=320&amp;videoResolutionHeight=180</snapshot_query_string>",
+      f"a 320 px tile gets a 320x180 picture from the camera ({q})")
+q = d.call("UIRequest", "GET_SNAPSHOT_QUERY_STRING", d.table({"SIZE_X": "1920", "SIZE_Y": "1080"}))
+check(q == "<snapshot_query_string>ISAPI/Streaming/channels/101/picture</snapshot_query_string>", f"full screen gets the whole main picture ({q})")
+check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/101/picture?videoResolutionWidth=1280&videoResolutionHeight=720"),
+      "notification picture is 1280x720")
+check(d.device_cmds("DL_CAMERA_STATUS", 500)[-1][2].get("SNAPSHOT") == "ISAPI/Streaming/channels/101/picture?videoResolutionWidth=1280&videoResolutionHeight=720",
+      "the hub is told which picture to attach")
+
+d = started(camera(resize="ignore"))
+d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.81", "USERNAME": USER, "PASSWORD": PASS}))
+d.timers()
+q = d.call("UIRequest", "GET_SNAPSHOT_QUERY_STRING", d.table({"SIZE_X": "320", "SIZE_Y": "180"}))
+check(q == "<snapshot_query_string>ISAPI/Streaming/channels/102/picture</snapshot_query_string>",
+      f"a camera that ignores sizes keeps whole stream pictures ({q})")
+check(d.call("GetNotificationAttachmentURL").endswith("/ISAPI/Streaming/channels/101/picture"), "... and the main picture for notifications")
 
 # ---------------------------------------------------------------- requests to one camera run one at a time
 d = Driver("camera", camera())
