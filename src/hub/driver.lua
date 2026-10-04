@@ -931,7 +931,7 @@ end
     Update check (opt-in, property "Check For Updates"): once a day the hub asks
     GitHub for the latest release and shows it next to Driver Version.
 ===============================================================================]]
-local RELEASES_API = "https://api.github.com/repos/IsraelCIL/DirectorLink-Hikvision/releases/latest"
+local RELEASES_API = "https://api.github.com/repos/DirectorLink/DirectorLink-Hikvision/releases/latest"
 
 local function VersionNumber(v)
 	local a, b, c = string.match(tostring(v or ""), "^v?(%d+)%.(%d+)%.(%d+)")
@@ -959,12 +959,19 @@ function CheckForUpdates()
 		gState.latestVersion = nil
 		return ShowDriverVersion()
 	end
-	pcall(function()
+	local function fetch(url, hops)
 		local x = C4:url()
 		x:SetOptions({ fail_on_error = false, timeout = 20, connect_timeout = 10 })
 		x:OnDone(function(_, responses)
 			local resp = responses and responses[#responses]
-			if resp and tonumber(resp.code) == 200 then
+			local code = resp and tonumber(resp.code) or 0
+			-- The repository moved (renamed or transferred): GitHub points to the new address
+			local moved = resp and HeaderValue(resp.headers, "Location")
+			if (code == 301 or code == 302 or code == 307 or code == 308) and hops < 2
+				and type(moved) == "string" and string.find(moved, "^https://api%.github%.com/") then
+				return fetch(moved, hops + 1)
+			end
+			if code == 200 then
 				local tag = string.match(resp.body or "", '"tag_name"%s*:%s*"([^"]+)"')
 				if tag then
 					gState.latestVersion = (string.gsub(tag, "^v", ""))
@@ -975,8 +982,9 @@ function CheckForUpdates()
 			end
 			ShowDriverVersion()
 		end)
-		x:Get(RELEASES_API, { ["User-Agent"] = UserAgent(), ["Accept"] = "application/vnd.github+json" })
-	end)
+		x:Get(url, { ["User-Agent"] = UserAgent(), ["Accept"] = "application/vnd.github+json" })
+	end
+	pcall(fetch, RELEASES_API, 0)
 end
 
 local function ScheduleUpdateChecks()

@@ -29,12 +29,15 @@ def probe_match(ip, model, port=80, digital=1, activated="true"):
 
 
 NVR_STATUS = {"xml": None}
-GITHUB = {"calls": 0}
+GITHUB = {"calls": 0, "moved": False}
 
 
 def network(method, url, headers, body):
     if url.startswith("https://api.github.com/"):
         GITHUB["calls"] += 1
+        GITHUB["last"] = url
+        if GITHUB["moved"] and "/repos/" in url:
+            return 301, {"Location": "https://api.github.com/repositories/1403883922/releases/latest"}, ""
         return 200, {}, '{"tag_name": "v9.9.9", "name": "DirectorLink"}'
     if not digest_ok(method, headers.get("Authorization")):
         return 401, {"WWW-Authenticate": 'Digest realm="NVR", qop="auth", nonce="abc123", stale="FALSE"'}, ""
@@ -265,6 +268,14 @@ check("update available: 9.9.9" in d.prop("Driver Version"), f"Driver Version sh
 d.g.Properties["Check For Updates"] = "Off"
 d.call("OnPropertyChanged", "Check For Updates")
 check("update" not in d.prop("Driver Version") and GITHUB["calls"] == 1, "turned off again: no request, no notice")
+check("/repos/DirectorLink/DirectorLink-Hikvision/" in [e["url"] for e in d.g.HTTP_LOG.values() if "github" in e["url"]][0],
+      "asks the repository at its current address (DirectorLink organisation)")
+GITHUB["calls"], GITHUB["moved"] = 0, True
+d.g.Properties["Check For Updates"] = "On"
+d.call("OnPropertyChanged", "Check For Updates")
+check(GITHUB["calls"] == 2 and GITHUB["last"].endswith("/repositories/1403883922/releases/latest") and "update available: 9.9.9" in d.prop("Driver Version"),
+      "if the repository moves again, the check follows GitHub's redirect once")
+GITHUB["moved"] = False
 
 # ---------------------------------------------------------------- failures are explained
 d = hub()
