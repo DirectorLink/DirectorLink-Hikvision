@@ -1,0 +1,24 @@
+DirectorLink · Hikvision for Control4
+Copyright 2026 DirectorLink
+
+This product is licensed under the Apache License 2.0 (see LICENSE).
+
+DirectorLink is not affiliated with or endorsed by Hikvision, Control4 or
+Snap One. Hikvision, Control4 and related names are trademarks of their
+respective owners.
+
+Credits
+
+No third-party code is included. Hikvision ISAPI behaviour was learned from
+these open-source projects:
+  - Home Assistant (https://github.com/home-assistant/core)
+  - pyHik (https://github.com/mezz64/pyHik)
+  - hikvision_next (https://github.com/maciej-or/hikvision_next)
+  - Scrypted (https://github.com/koush/scrypted)
+  - openHAB add-ons (https://github.com/openhab/openhab-addons)
+
+Control4 interfaces follow the public Snap One DriverWorks documentation
+(https://snap-one.github.io/docs-driverworks-fundamentals/).
+
+The test fixtures in tests/ describe a made-up home; addresses, names and
+serial numbers in them are invented.

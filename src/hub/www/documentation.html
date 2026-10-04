@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DirectorLink · Hikvision</title>
+<style>
+  :root { --cyan:#28d2ff; --cyan-ink:#0a7fa3; --ink:#1f2328; --muted:#5d6670; --bg:#ffffff; --panel:#f4f6f8; --line:#dde3e8; --hero:#23272b; --hero2:#3a3f44; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#e8ecef; --muted:#9aa4ad; --bg:#15181b; --panel:#1e2226; --line:#30363c; --cyan-ink:#28d2ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 "Segoe UI", -apple-system, Arial, sans-serif; }
+  a { color:var(--cyan-ink); }
+  .hero { background:linear-gradient(135deg, var(--hero), var(--hero2)); color:#fff; padding:22px 24px; display:flex; gap:18px; align-items:center; }
+  .hero img { width:84px; height:84px; flex:none; }
+  .hero h1 { margin:0; font-size:22px; font-weight:600; }
+  .hero .tag { color:var(--cyan); font-weight:600; margin:2px 0 6px; }
+  .hero p { margin:0; color:#c9d1d8; }
+  .hero p.url { color:#fff; margin:0 0 6px; font-weight:600; }
+  .badge { display:inline-block; background:var(--cyan); color:#06222b; font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; margin-left:8px; vertical-align:3px; }
+  main { max-width:920px; padding:8px 24px 32px; }
+  h2 { font-size:17px; margin:28px 0 10px; padding-left:10px; border-left:4px solid var(--cyan); }
+  h3 { font-size:14px; margin:18px 0 6px; }
+  .muted { color:var(--muted); }
+  .links { margin:14px 0 0; padding:10px 14px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:var(--panel); font-weight:600; }
+  code { background:var(--panel); border:1px solid var(--line); padding:0 4px; border-radius:4px; font-size:12.5px; }
+  .states { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; margin:10px 0; }
+  .state { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; text-align:center; }
+  .state img { width:72px; height:72px; }
+  .state b { display:block; margin-top:6px; }
+  .state span { color:var(--muted); font-size:12.5px; }
+  .steps { counter-reset:step; list-style:none; padding:0; margin:8px 0; }
+  .steps li { counter-increment:step; position:relative; padding:8px 10px 8px 44px; margin:6px 0; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  .steps li::before { content:counter(step); position:absolute; left:10px; top:8px; width:24px; height:24px; border-radius:50%; background:var(--cyan); color:#06222b; font-weight:700; text-align:center; line-height:24px; font-size:12.5px; }
+  .note { border-left:3px solid var(--cyan); background:var(--panel); padding:8px 12px; border-radius:0 8px 8px 0; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <img src="icons/tile/on_300.png" alt="">
+  <div>
+    <h1>DirectorLink &middot; Hikvision</h1>
+    <div class="tag">Free, open-source Control4 driver for Hikvision IP cameras and NVRs. Part of DirectorLink Drivers.</div>
+    <p class="url">https://directorlink.io/drivers/hikvision</p>
+    <p>Finds every Hikvision camera and NVR on the network, adds them all to the project with one login, and gives the home one alerts tile.</p>
+  </div>
+</div>
+<main>
+<div class="links">Free. No subscription, no license key, no account with us. Downloads, updates and help: see the address above.</div>
+
+<h2>Set up every camera in three steps</h2>
+<ol class="steps">
+  <li><b>Upload both drivers</b> with <i>Driver &gt; Add or Update Driver or Agent</i>: <code>DirectorLink-Hikvision.c4z</code> and <code>DirectorLink-Hikvision-Camera.c4z</code>. Keep these exact file names: a "(1).c4z" copy installs as a separate driver. Search <i>DirectorLink</i> and add <b>DirectorLink &middot; Hikvision</b> to the room where new cameras should appear (for example a "Cameras" room). It shows in the project as <b>Hikvision Hub</b>.</li>
+  <li>In the hub's properties, enter the camera <b>Username</b> and <b>Password</b>. The hub searches the network and shows what it found in <i>Found On Network</i>.</li>
+  <li>Run <b>Actions &gt; Add New Cameras</b>. The hub checks the login first, then adds every camera, names it, and fully configures it (address, ports, Digest login, channel). With <i>Sub Stream To H.264</i> on Automatic (the default), each camera also switches its sub stream to H.264 so Control4 can play it. The name is the camera's existing Control4 name, else its NVR channel name, else its on-screen name. Then drag each camera to its room.</li>
+</ol>
+<p class="note">Cameras added later: run <b>Search Network</b> and <b>Add New Cameras</b> again. Only the new ones are added. Cameras you added by hand are picked up too: the hub sees every DirectorLink &middot; Hikvision Camera driver in the project.</p>
+
+<h2>The alerts tile</h2>
+<p>The hub appears in Composer as <b>Hikvision Hub</b>. Add it to a room menu (for example <i>Security</i>) in Composer's Navigator settings, and rename it to something homeowners understand, such as <b>Camera Alerts</b>. Tapping the tile turns alerts on or off for every camera.</p>
+<div class="states">
+  <div class="state"><img src="icons/tile/on_300.png" alt=""><b>Alerts on</b><span>All cameras watching</span></div>
+  <div class="state"><img src="icons/tile/alert_300.png" alt=""><b>Alert</b><span>A camera raised an alert</span></div>
+  <div class="state"><img src="icons/tile/off_300.png" alt=""><b>Alerts off</b><span>Off or snoozed</span></div>
+  <div class="state"><img src="icons/tile/error_300.png" alt=""><b>Attention</b><span>A camera is offline or its login failed</span></div>
+  <div class="state"><img src="icons/tile/pending_300.png" alt=""><b>Working</b><span>Searching or adding cameras</span></div>
+</div>
+<p class="note">Alerts off pauses the <i>Alert</i> events and notifications. Detection events (motion, person, line crossing...) keep running automations such as lights. Each camera also has its own alerts switch in its controls.</p>
+
+<h2>One notification for all cameras</h2>
+<p>Program once on the hub instead of on every camera:</p>
+<p><b>When</b> Hikvision Hub &rarr; <i>Camera Alert</i> &rarr; <b>Send notification</b> "<code>LAST_ALERT_TYPE</code> at <code>LAST_ALERT_CAMERA</code>" with the attachment <i>Snapshot from the camera that raised the alert</i>.</p>
+<p>Other ideas: when the security system arms, run <code>SET_ALERTS On</code>; when it disarms, <code>SET_ALERTS Off</code>. Use <i>Camera Offline</i> to notify the installer.</p>
+
+<h2>Properties</h2>
+<table>
+  <tr><th>Property</th><th>Description</th></tr>
+  <tr><td>Status</td><td>What the hub is doing and what to do next, in plain language.</td></tr>
+  <tr><td>Cameras</td><td>Cameras in the project, how many are online or disabled, which are offline, have a login problem, or have no H.264 video.</td></tr>
+  <tr><td>Found On Network</td><td>Result of the last search: cameras, NVRs, how many are not added yet or ignored, cameras that still need activating.</td></tr>
+  <tr><td>Username / Password</td><td>The login used for every camera.</td></tr>
+  <tr><td>NVR Username / Password</td><td>Only if the NVR uses a different login. Used to read the NVR's camera names, and for cameras that are only reachable through the NVR.</td></tr>
+  <tr><td>Camera Names</td><td>Automatic (default): the name of an existing Control4 camera with the same IP, else the NVR channel name, else the camera's on-screen name, else model and IP. Or only the camera's own name, or model and IP.</td></tr>
+  <tr><td>Extra Camera IPs</td><td>Cameras on another subnet or VLAN that the network search cannot reach: <code>10.0.5.20, 10.0.5.21:8080</code>.</td></tr>
+  <tr><td>Sub Stream To H.264</td><td>Control4 plays H.264 only. Automatic (default): cameras the hub adds switch their sub stream to H.264 (the main stream, used for recording, is not touched); choosing Automatic also applies it to cameras already added. Off: leave the cameras as they are.</td></tr>
+  <tr><td>Ignored Cameras</td><td>Cameras Add New Cameras skips: a camera IP (also its NVR channel), <code>192.168.50.10/3</code> for one NVR channel, or an NVR IP for all its channels.</td></tr>
+  <tr><td>Alerts</td><td>Master alerts switch (same as the tile).</td></tr>
+  <tr><td>Default Alert On</td><td>The Alert On setting given to new cameras: any detection, people and vehicles, or people only.</td></tr>
+  <tr><td>Snapshot With Alerts</td><td>Keep a snapshot of the alerting camera for notifications.</td></tr>
+  <tr><td>Log Level</td><td>Debug output to the Lua tab.</td></tr>
+</table>
+
+<h2>Actions</h2>
+<table>
+  <tr><th>Action</th><th>What it does</th></tr>
+  <tr><td>Search Network</td><td>Finds Hikvision cameras and NVRs (Hikvision SADP discovery, plus Extra Camera IPs) and reads the NVR's camera names.</td></tr>
+  <tr><td>Add New Cameras</td><td>Checks the login, then adds and configures every camera that is not in the project yet.</td></tr>
+  <tr><td>Update Camera Names</td><td>Renames the cameras the hub added from the best name available now (for example after fixing the login or naming the NVR channels).</td></tr>
+  <tr><td>Apply Login To All Cameras</td><td>Sends the hub's login to every camera it added (also done automatically when the login changes).</td></tr>
+  <tr><td>Set All Sub Streams To H.264</td><td>Control4 plays H.264 only. Switches every camera's sub stream to H.264; main streams are left alone. Each camera's <i>Video</i> line shows the result.</td></tr>
+  <tr><td>Camera List</td><td>Prints every camera, its address and state, and what is on the network but not added, to the Lua tab.</td></tr>
+</table>
+
+<h2>Programming reference</h2>
+<h3>Events</h3>
+<p>Camera Alert, Camera Offline, Camera Online, Alerts On, Alerts Off, New Cameras Found.</p>
+<h3>Variables</h3>
+<p><code>ALERTS_ENABLED</code>, <code>ALERT_ACTIVE</code>, <code>ALL_ONLINE</code> (BOOL); <code>CAMERAS_TOTAL</code>, <code>CAMERAS_ONLINE</code> (NUMBER); <code>LAST_ALERT_CAMERA</code>, <code>LAST_ALERT_TYPE</code>, <code>LAST_ALERT_TIME</code>, <code>LAST_OFFLINE_CAMERA</code> (STRING).</p>
+<h3>Conditionals</h3>
+<p>Camera alerts are On / Off &middot; An alert is Active / Clear &middot; All cameras are Online / Not all online &middot; Last alert is / is not &lt;type&gt;.</p>
+<h3>Commands</h3>
+<p><code>SET_ALERTS</code> (On / Off / Toggle), <code>SNOOZE_ALERTS</code> (minutes), <code>SEARCH_NETWORK</code>.</p>
+
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>What to check</th></tr>
+  <tr><td>Nothing found</td><td>The cameras must be on the controller's network. For other subnets/VLANs fill in <i>Extra Camera IPs</i>. Cameras behind an NVR's PoE ports are found through the NVR.</td></tr>
+  <tr><td>"Could not add the camera driver"</td><td>Upload <code>DirectorLink-Hikvision-Camera.c4z</code> with Driver &gt; Add or Update Driver, then run Add New Cameras again.</td></tr>
+  <tr><td>"Not activated"</td><td>Brand-new cameras must be activated (given a password) with Hikvision SADP or the camera's web page first.</td></tr>
+  <tr><td>Login failed on a camera</td><td>Fix the hub's login (or that camera's own login) - each wrong password costs only one attempt, so cameras do not lock.</td></tr>
+  <tr><td>Video does not play</td><td>The camera has no H.264 stream (the <i>Cameras</i> line lists them): run <b>Set All Sub Streams To H.264</b>. If a camera refuses, its <i>Attention</i> line says why; set the sub stream on its web page.</td></tr>
+  <tr><td>An NVR camera shows offline</td><td>The NVR reports that channel's camera as disconnected. Check the camera; if it is gone for good, set its <b>Camera Enabled</b> to <b>No</b>.</td></tr>
+  <tr><td>A camera is off or removed</td><td>Set its <b>Camera Enabled</b> to <b>No</b> (or delete it), and list it in <i>Ignored Cameras</i> so it is not added again.</td></tr>
+  <tr><td>Names are model + IP</td><td>The hub could not log in to read names: fix the login, then run <b>Update Camera Names</b>. Or name the channels on the NVR, or rename them in Composer.</td></tr>
+</table>
+
+<h2>Change log</h2>
+<table>
+  <tr><th>Version</th><th>Changes</th></tr>
+  <tr><td>1.0.2</td><td>First release.</td></tr>
+</table>
+
+<h2>License</h2>
+<p class="muted">Installing third-party drivers or changing a Control4 project can affect compatibility, support, warranty or recovery. Keep a backup of your project. The license is included as <code>www/LICENSE.txt</code> and <code>www/NOTICE.txt</code>.</p>
+<p>Apache License 2.0. Copyright 2026 DirectorLink. Not affiliated with or endorsed by Hikvision, Control4 or Snap One. Hikvision, Control4 and related names are trademarks of their respective owners.</p>
+</main>
+</body>
+</html>
