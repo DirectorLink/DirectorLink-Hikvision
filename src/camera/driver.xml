@@ -122,6 +122,7 @@
 				<item>Motion</item><item>Person</item><item>Vehicle</item><item>Line Crossing</item><item>Intrusion</item>
 				<item>Region Entrance</item><item>Region Exiting</item><item>Tamper</item><item>Scene Change</item>
 				<item>Face</item><item>Object Left</item><item>Object Removed</item><item>Alarm Input</item><item>PIR</item>
+				<item>Animal</item><item>Package</item><item>License Plate</item>
 			</items>
 		</conditional>
 	</conditionals>

@@ -367,7 +367,37 @@ local EVENT_TYPE_MAP = {
 	io = "io", scenechangedetection = "scenechange",
 	facedetection = "face", facesnap = "face", pir = "pir",
 	unattendedbaggage = "objectleft", attendedbaggage = "objectremoved",
+	-- Other Hikvision detections go to the nearest one
+	loitering = "fielddetection", group = "person", peoplegathering = "person", rapidmove = "motion",
+	parking = "vehicle", vehicledetection = "vehicle", anpr = "vehicle", defocus = "tamper",
 }
+
+-- DirectorLink camera agreement v1: LAST_ALERT only ever carries these labels
+local ALERT_LABELS = {
+	["Person"] = true, ["Vehicle"] = true, ["Face"] = true, ["Motion"] = true, ["Line Crossing"] = true,
+	["Intrusion"] = true, ["Region Entrance"] = true, ["Region Exiting"] = true, ["Tamper"] = true,
+	["Scene Change"] = true, ["Object Left"] = true, ["Object Removed"] = true, ["Alarm Input"] = true,
+	["PIR"] = true, ["Animal"] = true, ["Package"] = true, ["License Plate"] = true,
+}
+-- Event types and detection targets that have a more precise label than their detection
+local EVENT_ALERT_LABEL = { anpr = "License Plate" }
+local TARGET_ALERT_LABEL = {
+	animal = "Animal", animals = "Animal", pet = "Animal", dog = "Animal", cat = "Animal",
+	package = "Package", parcel = "Package", plate = "License Plate", licenseplate = "License Plate",
+}
+
+local function AlertLabel(label)
+	if ALERT_LABELS[label] then return label end
+	return "Motion" -- the nearest label for anything unknown
+end
+
+local function TargetAlertLabel(target)
+	for word in string.gmatch(target or "", "%a+") do
+		local label = TARGET_ALERT_LABEL[word]
+		if label then return label end
+	end
+	return nil
+end
 
 local ALERT_CONTACT = 100
 local CONTACT_BINDINGS = { [ALERT_CONTACT] = "alert" }
@@ -411,25 +441,26 @@ end
 
 local CaptureEventSnapshot -- forward
 
-local function TriggerAlert(d)
+local function TriggerAlert(d, label)
 	if not AlertsEnabled() then return end
 	local filter = ALERT_FILTERS[Properties["Alert On"] or "Any detection"] or ALERT_FILTERS["Any detection"]
 	if not filter[d.class] then return end
 	if not gState.alertActive then
+		label = AlertLabel(label or d.label)
 		gState.alertActive = true
-		gState.lastAlert = d.label
+		gState.lastAlert = label
 		local stamp = os.date("%Y-%m-%d %H:%M:%S")
 		SetVar("ALERT_ACTIVE", true)
-		SetVar("LAST_ALERT", d.label)
+		SetVar("LAST_ALERT", label)
 		SetVar("LAST_ALERT_TIME", stamp)
 		SendContact(ALERT_CONTACT, true)
 		if CaptureEventSnapshot then CaptureEventSnapshot() end
 		FireEvent("Alert")
 		if (Properties["Record Alerts In History"] or "Yes") == "Yes" then
-			pcall(function() C4:RecordHistory("Info", d.label .. " detected", "Cameras", CameraName(), { camera = CameraName(), detection = d.label }) end)
+			pcall(function() C4:RecordHistory("Info", label .. " detected", "Cameras", CameraName(), { camera = CameraName(), detection = label }) end)
 		end
 		if gCfg.hubId then
-			SendToDriver(gCfg.hubId, "DL_CAMERA_ALERT", { DEVICE_ID = MyDeviceId(), PROXY_ID = ProxyId(), NAME = CameraName(), TYPE = d.label, TIME = stamp })
+			SendToDriver(gCfg.hubId, "DL_CAMERA_ALERT", { DEVICE_ID = MyDeviceId(), PROXY_ID = ProxyId(), NAME = CameraName(), TYPE = label, TIME = stamp })
 		end
 		UpdateStatus()
 	end
@@ -448,7 +479,7 @@ local function DetectionEnd(key)
 	if d.endEvent then FireEvent(d.endEvent) end
 end
 
-local function DetectionPulse(key)
+local function DetectionPulse(key, alertLabel)
 	local d = DETECTIONS[key]
 	if not d then return end
 	local st = gDet[key]
@@ -464,7 +495,7 @@ local function DetectionPulse(key)
 		if d.contact then SendContact(d.contact, true) end
 		FireEvent(d.event)
 	end
-	TriggerAlert(d)
+	TriggerAlert(d, alertLabel)
 	SetTimer("DET_" .. key, HoldSeconds() * 1000, function() DetectionEnd(key) end)
 end
 
@@ -519,7 +550,7 @@ function HandleAlert(xml)
 	local key = EVENT_TYPE_MAP[etype]
 	if key then
 		if state == "active" then
-			DetectionPulse(key)
+			DetectionPulse(key, TargetAlertLabel(target) or EVENT_ALERT_LABEL[etype])
 		elseif DETECTIONS[key].endsOnInactive then
 			DetectionEnd(key)
 		end
@@ -1787,11 +1818,22 @@ local VARIABLES = {
 	{ "LAST_DETECTION", "", "STRING" },
 	{ "LAST_ALERT", "", "STRING" },
 	{ "LAST_ALERT_TIME", "", "STRING" },
+	-- DirectorLink camera agreement v1 (other drivers read these by name). A Hikvision doorbell or
+	-- intercom, if ever supported, would set KIND = "doorbell", LAST_RING (ISO 8601 UTC) and fire "Ring".
+	{ "DIRECTORLINK_CAMERA", "1", "STRING" },
+	{ "DIRECTORLINK_CAMERA_KIND", "camera", "STRING" },
 }
+
+-- Written on every start, so they are right after a driver update too
+local function SetAgreementVariables()
+	SetVar("DIRECTORLINK_CAMERA", "1", true)
+	SetVar("DIRECTORLINK_CAMERA_KIND", "camera", true)
+end
 
 function OnDriverInit(dit)
 	math.randomseed(os.time())
 	AddVariables(VARIABLES)
+	SetAgreementVariables()
 	LoadCfg()
 	ApplyConnection()
 	gCam.onAuthChange = function() UpdateStatus() end
@@ -1809,6 +1851,7 @@ function OnDriverLateInit(dit)
 	end
 	SetVar("ONLINE", false)
 	SetVar("ALERT_ACTIVE", false)
+	SetAgreementVariables()
 
 	if dit == "DIT_ADDING" or (DIT_ADDING ~= nil and dit == DIT_ADDING) then
 		-- A new camera proxy starts with BASIC / not required; Hikvision needs Digest

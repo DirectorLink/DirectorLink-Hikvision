@@ -414,6 +414,46 @@ note = [l for l in printed if l.startswith("Snapshot notification")]
 check(note and "/102/picture" in note[0] and "640x360" in note[0], f"Test Snapshot checks the picture notifications really use ({note})")
 check(any(l.startswith("Snapshot resize: the camera ignores") for l in printed), "Test Snapshot says the camera ignores the requested size")
 
+# ---------------------------------------------------------------- DirectorLink camera agreement v1
+OLD_VARS = ["ONLINE", "ALERTS_ENABLED", "ALERT_ACTIVE", "MOTION", "PERSON", "VEHICLE", "LINE_CROSSING", "INTRUSION", "TAMPER",
+            "ALARM_INPUT", "MOTION_DETECTION_ENABLED", "LAST_DETECTION", "LAST_ALERT", "LAST_ALERT_TIME"]
+d = started(camera())
+check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "agreement variables set at init")
+check(list(d.g.VAR_ORDER.values()) == OLD_VARS + ["DIRECTORLINK_CAMERA", "DIRECTORLINK_CAMERA_KIND"],
+      "agreement variables come after the existing ones (variable order unchanged)")
+
+d = Driver("camera", camera())   # a driver update: new Lua state, Director keeps the variables and their values
+d.run('VARS["DIRECTORLINK_CAMERA"] = "0"; VARS["DIRECTORLINK_CAMERA_KIND"] = "doorbell"')
+d.call("OnDriverInit", "DIT_UPDATING")
+check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "agreement variables corrected at init after an update")
+d.run('VARS["DIRECTORLINK_CAMERA_KIND"] = "x"')
+d.run("OnDriverLateInit('DIT_UPDATING')")
+check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "... and kept when the driver finishes starting")
+
+ALLOWED = {"Person", "Vehicle", "Face", "Motion", "Line Crossing", "Intrusion", "Region Entrance", "Region Exiting", "Tamper",
+           "Scene Change", "Object Left", "Object Removed", "Alarm Input", "PIR", "Animal", "Package", "License Plate"}
+d = started(camera())
+d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.81", "USERNAME": USER, "PASSWORD": PASS,
+                                                  "ALERT_ON": "Any detection"}))
+d.timers()
+seen = []
+for etype, target, expected in (("ANPR", None, "License Plate"), ("loitering", None, "Intrusion"), ("VMD", "animal", "Animal"),
+                                ("VMD", "human", "Motion"), ("linedetection", None, "Line Crossing"), ("rapidMove", None, "Motion"),
+                                ("defocus", None, "Tamper"), ("group", None, "Person"), ("facedetection", None, "Face")):
+    d.clear()
+    d.run("SEQ = {}")
+    d.call("HandleAlert", alert(etype, target=target))
+    seq = list(d.g.SEQ.values())
+    got = d.var("LAST_ALERT")
+    seen.append(got)
+    check("Alert" in d.events() and got == expected and seq.index("var:LAST_ALERT") < seq.index("event:Alert"),
+          f"{etype}{' (' + target + ')' if target else ''}: LAST_ALERT '{got}', set before Alert fires")
+    d.timers()   # hold time ends the alert
+d.clear()
+d.call("HandleAlert", alert("audioexception"))
+check("Alert" not in d.events(), "events with no nearest detection (sound) raise no alert")
+check(all(s in ALLOWED for s in seen), f"LAST_ALERT only carries the agreement's labels ({sorted(set(seen))})")
+
 # ---------------------------------------------------------------- requests to one camera run one at a time
 d = Driver("camera", camera())
 d.run("""

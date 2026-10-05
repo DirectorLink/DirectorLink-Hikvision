@@ -162,10 +162,14 @@ The camera view itself (video, snapshots, PTZ arrows) is drawn by Control4. PTZ 
 **Hikvision Camera**
 
 - **Events:** Alert · Motion Detected · Motion Ended · Person Detected · Vehicle Detected · Line Crossing · Intrusion Detected · Region Entrance · Region Exiting · Tamper Detected · Scene Change Detected · Face Detected · Object Left Behind · Object Removed · Alarm Input Active · Alarm Input Inactive · PIR Alarm · Camera Online · Camera Offline · Alerts On · Alerts Off
-- **Variables:** `ONLINE` `ALERTS_ENABLED` `ALERT_ACTIVE` `MOTION` `PERSON` `VEHICLE` `LINE_CROSSING` `INTRUSION` `TAMPER` `ALARM_INPUT` `MOTION_DETECTION_ENABLED` (BOOL) · `LAST_DETECTION` `LAST_ALERT` `LAST_ALERT_TIME` (STRING)
+- **Variables:** `ONLINE` `ALERTS_ENABLED` `ALERT_ACTIVE` `MOTION` `PERSON` `VEHICLE` `LINE_CROSSING` `INTRUSION` `TAMPER` `ALARM_INPUT` `MOTION_DETECTION_ENABLED` (BOOL) · `LAST_DETECTION` `LAST_ALERT` `LAST_ALERT_TIME` `DIRECTORLINK_CAMERA` `DIRECTORLINK_CAMERA_KIND` (STRING)
 - **Conditionals:** Camera is Online · Alerts are On · Alert is Active · Motion is Active · Active detection is &lt;type&gt; · Last alert is &lt;type&gt;
 - **Commands:** `SET_ALERTS` · `SNOOZE_ALERTS` · `SET_ALERT_ON` · `SET_MOTION_DETECTION` · `SET_DAY_NIGHT` · `SET_LIGHT_MODE` · `SET_IMAGE` (brightness, contrast, saturation, sharpness) · `SET_ALARM_OUTPUT` · `GOTO_PRESET` · `REBOOT_CAMERA`
 - **Contacts** (Connections → Control): Alert · Motion · Person · Vehicle · Line Crossing · Intrusion · Tamper · Alarm Input. Bind them to Control4 motion or contact sensor devices.
+
+## With DirectorLink
+
+From DirectorLink 1.10, the DirectorLink app recognizes these cameras through the DirectorLink camera agreement: each camera sets the variables `DIRECTORLINK_CAMERA` = `1` and `DIRECTORLINK_CAMERA_KIND` = `camera`, and the app shows its alerts (the *Alert* event and `LAST_ALERT`) and pictures. DirectorLink 1.8 and 1.9 still recognize the cameras by their file name.
 
 ## Updating
 

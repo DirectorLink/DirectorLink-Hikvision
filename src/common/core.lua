@@ -186,10 +186,10 @@ function AddVariables(list)
 	end
 end
 
-function SetVar(name, value)
+function SetVar(name, value, force)
 	if type(value) == "boolean" then value = value and "1" or "0" end
 	value = tostring(value)
-	if gVarValues[name] == value then return end
+	if gVarValues[name] == value and not force then return end
 	gVarValues[name] = value
 	pcall(function() C4:SetVariable(name, value) end)
 end

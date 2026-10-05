@@ -22,9 +22,11 @@ HISTORY = {}; ADDED = {}; NET = {}; ATTRIBS = {}; HTTP_LOG = {}
 PROXY_PROPS = ""; BINDING_ADDRESS = ""; DEVICE_ID = 900; PROXY_DEVICE = 901; C4I_DEVICES = {}
 local timerSeq = 0
 C4 = {}
-function C4:AddVariable(n, v) VARS[n] = v; return 1, true end
-function C4:SetVariable(n, v) VARS[n] = v end
-function C4:FireEvent(n) EVENTS[#EVENTS + 1] = n end
+VAR_ORDER = {}; SEQ = {}
+-- Like Director: adding a variable that already exists keeps its value (driver updates)
+function C4:AddVariable(n, v) if VARS[n] == nil then VARS[n] = v end; VAR_ORDER[#VAR_ORDER + 1] = n; return 1, true end
+function C4:SetVariable(n, v) VARS[n] = v; SEQ[#SEQ + 1] = "var:" .. n end
+function C4:FireEvent(n) EVENTS[#EVENTS + 1] = n; SEQ[#SEQ + 1] = "event:" .. n end
 function C4:UpdateProperty(n, v) Properties[n] = v end
 function C4:SetPropertyAttribs(n, v) ATTRIBS[n] = v end
 function C4:SendToProxy(b, c, p, k) PROXY[#PROXY + 1] = { b, c, p } end
