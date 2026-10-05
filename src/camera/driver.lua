@@ -575,6 +575,8 @@ local function SetOnline(on)
 	if on and gState.channelOffline then on = false end -- the NVR answers, its camera does not
 	if gState.online == on then return end
 	local prev = gState.online
+	-- Back after being offline (reboot, firmware upgrade): read firmware, streams and settings again
+	if on and prev == false then SetTimer("REFRESH", 5000, function() Refresh() end) end
 	gState.online = on
 	SetVar("ONLINE", on)
 	if on then gState.healthFails = 0 else EndAllDetections() end
@@ -627,6 +629,12 @@ end
 
 local function HealthCheck()
 	if not CameraEnabled() or not ValidAddress(gCam.host) then return end
+	-- A login refused earlier (often while the camera was still starting) is tried once more after a while
+	if HasLogin() and TargetLoginRetryDue(gCam) then
+		LogInfo("Trying the login on %s again", gCam.host)
+		Refresh()
+		return
+	end
 	if gInfo.isRecorder and HasLogin() and not gCam.authFailed then
 		CheckChannel()
 		return
@@ -677,6 +685,7 @@ local function Stream_Reconnect(delayMs)
 end
 
 local function Stream_Retry(reason)
+	gStream.outage = true
 	gStream.fails = gStream.fails + 1
 	local delay = math.min(60, 5 * (2 ^ math.min(gStream.fails - 1, 4)))
 	LogDebug("Event stream: %s (retry %d in %ds)", reason, gStream.fails, delay)
@@ -756,6 +765,11 @@ local function Stream_OnRead(client, data, gen)
 			gStream.chunked = string.find(string.lower(tostring(headers["transfer-encoding"] or "")), "chunked", 1, true) ~= nil
 			if gStream.sentAuth then SetTargetAuthFailed(gCam, false) end
 			LogInfo("Event stream connected")
+			-- Reconnected after the camera dropped it (reboot, firmware upgrade): read the camera again
+			if gStream.outage and os.time() - (gState.lastRefreshAt or 0) > 60 then
+				SetTimer("REFRESH", 5000, function() Refresh() end)
+			end
+			gStream.outage = false
 			SetOnline(true)
 			UpdateStatus()
 			client:ReadUpTo(65536)
@@ -1480,6 +1494,7 @@ Refresh = function()
 
 	RunSteps(steps, gen, function()
 		gState.refreshing = false
+		gState.lastRefreshAt = os.time()
 		LogInfo("Camera ready: %s %s", gInfo.model, gInfo.firmware)
 		pcall(function() C4:SendToProxy(CAMERA_PROXY, "DYNAMIC_URLS_CHANGED", {}, "NOTIFY") end)
 		SendExtrasSetup()
@@ -1705,6 +1720,7 @@ local COMMANDS = {
 		end
 		SaveCfg()
 		ApplyConnection()
+		if p.PASSWORD then SetTargetAuthFailed(gCam, false) end -- the hub sent the login on purpose: try it
 		LogInfo("Configured by the hub: %s (channel %s)", gCam.host, Properties["Channel"])
 		UpdateHubProperty()
 		WriteProxySettings()
@@ -1752,7 +1768,15 @@ end
 
 -- Edits made on the camera's Properties page arrive as these commands
 local function FromCameraPage(field, value, reconnect)
-	if value == nil or gCfg[field] == value then return end
+	if value == nil then return end
+	if gCfg[field] == value then
+		-- The same login entered again after it was refused: try it once more
+		if (field == "user" or field == "pass") and gCam.authFailed then
+			SetTargetAuthFailed(gCam, false)
+			ConfigChanged()
+		end
+		return
+	end
 	LogInfo("Camera page: %s changed", field)
 	gCfg[field] = value
 	SaveCfg()

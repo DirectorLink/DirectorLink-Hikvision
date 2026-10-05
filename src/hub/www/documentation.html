@@ -120,7 +120,7 @@
   <tr><td>Nothing found</td><td>The cameras must be on the controller's network. For other subnets/VLANs fill in <i>Extra Camera IPs</i>. Cameras behind an NVR's PoE ports are found through the NVR.</td></tr>
   <tr><td>"Could not add the camera driver"</td><td>Upload <code>DirectorLink-Hikvision-Camera.c4z</code> with Driver &gt; Add or Update Driver, then run Add New Cameras again.</td></tr>
   <tr><td>"Not activated"</td><td>Brand-new cameras must be activated (given a password) with Hikvision SADP or the camera's web page first.</td></tr>
-  <tr><td>Login failed on a camera</td><td>Fix the hub's login (or that camera's own login) - each wrong password costs only one attempt, so cameras do not lock.</td></tr>
+  <tr><td>Login failed on a camera or NVR</td><td>Check the hub's login (or that camera's own login) - each wrong password costs only one attempt, so devices do not lock. A device that was only starting (for example after a firmware upgrade) is tried again after 15 minutes, or at once when you run <b>Search Network</b> or enter the password again.</td></tr>
   <tr><td>Video does not play</td><td>The camera has no H.264 stream (the <i>Cameras</i> line lists them): run <b>Set All Sub Streams To H.264</b>. If a camera refuses, its <i>Attention</i> line says why; set the sub stream on its web page.</td></tr>
   <tr><td>An NVR camera shows offline</td><td>The NVR reports that channel's camera as disconnected. Check the camera; if it is gone for good, set its <b>Camera Enabled</b> to <b>No</b>.</td></tr>
   <tr><td>A camera is off or removed</td><td>Set its <b>Camera Enabled</b> to <b>No</b> (or delete it), and list it in <i>Ignored Cameras</i> so it is not added again.</td></tr>
@@ -130,6 +130,7 @@
 <h2>Change log</h2>
 <table>
   <tr><th>Version</th><th>Changes</th></tr>
+  <tr><td>1.1.1</td><td>A refused login is tried again (after 15 minutes, on Search Network, or when the password is entered again); Status clears as soon as the login works.</td></tr>
   <tr><td>1.1.0</td><td>Version number only (the camera driver joined the DirectorLink camera agreement).</td></tr>
   <tr><td>1.0.6</td><td>Check For Updates works again (the project moved to the DirectorLink organisation on GitHub).</td></tr>
   <tr><td>1.0.5</td><td>Snapshots at the size each screen asks for; lighter notification pictures; NVR channels whose camera is disconnected are not added; H.264 waits for an offline NVR channel; the "older camera driver" notice clears by itself; optional update check.</td></tr>

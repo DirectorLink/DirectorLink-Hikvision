@@ -183,7 +183,7 @@ From DirectorLink 1.10, the DirectorLink app recognizes these cameras through th
 |---|---|
 | The hub finds nothing | The cameras must be on the controller's network. Put cameras on other subnets in **Extra Camera IPs**. Cameras on an NVR's PoE ports are found through the NVR. |
 | "Could not add the camera driver" | Upload `DirectorLink-Hikvision-Camera.c4z` (Driver → Add or Update Driver or Agent), then run **Add New Cameras** again. |
-| Camera status "Login failed" | Fix the login on the hub, or on the camera's **Properties** page. A wrong password costs one attempt only; the driver waits until the login changes, so the camera never locks. |
+| "Login failed" (camera or hub) | Check the login on the hub, or on the camera's **Properties** page. A wrong password costs one attempt only, so devices never lock. A device that was only starting (for example after a firmware upgrade) is tried again by itself after 15 minutes, or at once when you run **Search Network** or enter the password again. |
 | Snapshots work, video doesn't | The camera has no H.264 stream. **Attention** says so and the hub's **Cameras** line lists it. Run **Set Sub Stream To H.264**. If the camera refuses, set the sub stream to H.264 on its web page. |
 | "Offline - the camera on NVR channel N is not connected to the NVR" | The NVR answers but that camera doesn't. Check the camera and its cable. If it is gone for good, set **Camera Enabled** to **No**. |
 | *Attention*: "The camera gives no snapshot" | The camera is off, or the camera behind the NVR is offline. If it is gone for good, set **Camera Enabled** to **No**. |

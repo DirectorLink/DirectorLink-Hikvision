@@ -255,6 +255,63 @@ check(("192.168.50.80", 4) not in c and ("192.168.50.80", 3) in c, f"dead NVR ch
 check("- 1 offline on the NVR" in d.prop("Found On Network"), f"Found On Network says so ({d.prop('Found On Network')})")
 NVR_STATUS["xml"] = None
 
+# ---------------------------------------------------------------- an NVR that refuses the login while it starts (after a firmware upgrade)
+NVR_START = {"starting": False}
+
+
+def nvr_starting(method, url, headers, body):
+    if NVR_START["starting"] and url.startswith("http://192.168.50.80:90/"):
+        return 401, {"WWW-Authenticate": 'Digest realm="NVR", qop="auth", nonce="abc123", stale="FALSE"'}, ""
+    return network(method, url, headers, body)
+
+
+def tick(d):
+    d.run("for _, t in ipairs(TIMERS) do if t.active and t.rep then t.fn(t) end end")
+
+
+def feed(d):
+    for m in (probe_match("192.168.50.80", "DS-7616NXI-K2(D)", port=90, digital=16), probe_match("192.168.50.81", "DS-2CD2087G2-L")):
+        d.call("HandleSadpData", m)
+    d.timers()
+
+
+def nvr_tries(d):
+    return [e for e in d.g.HTTP_LOG.values() if e["url"].startswith("http://192.168.50.80:90/") and e["auth"]]
+
+
+d = hub(nvr_starting)
+d.timers(); d.timers()
+NVR_START["starting"] = True
+d.call("StartDiscovery", "test"); feed(d)
+check(d.prop("Status").startswith("Login failed on 192.168.50.80"), f"NVR still starting: login refused ({d.prop('Status')})")
+NVR_START["starting"] = False
+d.clear()
+d.call("ExecuteCommand", "SEARCH_NETWORK", d.table({})); feed(d)
+check(not nvr_tries(d) and d.prop("Status").startswith("Login failed"), "a search from programming does not retry the refused login")
+d.clear()
+d.call("ExecuteCommand", "LUA_ACTION", d.table({"ACTION": "Search"})); feed(d)
+check(len(nvr_tries(d)) >= 1 and not d.prop("Status").startswith("Login failed"),
+      f"Search Network run by hand tries the login once more ({d.prop('Status')})")
+
+NVR_START["starting"] = True
+d.call("StartDiscovery", "test"); feed(d)
+NVR_START["starting"] = False
+d.call("OnPropertyChanged", "Password")    # the same password entered again
+d.timers(); feed(d)
+check(not d.prop("Status").startswith("Login failed"), f"the same password entered again is tried again ({d.prop('Status')})")
+
+NVR_START["starting"] = True
+d.call("StartDiscovery", "test"); feed(d)
+NVR_START["starting"] = False
+d.clear()
+tick(d)
+check(not nvr_tries(d) and d.prop("Status").startswith("Login failed"), "within 15 minutes nothing is retried")
+d.run("AUTH_RETRY_S = 0")
+tick(d)
+check(len(nvr_tries(d)) >= 1 and not d.prop("Status").startswith("Login failed") and not d.g.gLoginFailed["192.168.50.80"],
+      f"after 15 minutes the hub tries the NVR once more by itself ({d.prop('Status')})")
+d.run("AUTH_RETRY_S = 900")
+
 # ---------------------------------------------------------------- update check: off unless turned on
 GITHUB["calls"] = 0
 d = hub()

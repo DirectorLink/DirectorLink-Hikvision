@@ -8,11 +8,15 @@
 
     Lockout safety: a wrong password costs at most one failed login per request,
     and once a target is marked authFailed no further logins are attempted until
-    the credentials change (NewTargetCredentials) or a request passes force = true.
+    the credentials change, a request passes force = true, or AUTH_RETRY_S has
+    passed (one more try: a device that is still starting can refuse a good login).
 
     Copyright 2026 DirectorLink
     SPDX-License-Identifier: Apache-2.0
 ===============================================================================]]
+
+-- Seconds after a refused login before one more try (a few tries per hour stays far below lockout limits)
+AUTH_RETRY_S = 900
 
 function NewAuth()
 	return { scheme = nil, nc = 0 }
@@ -132,12 +136,18 @@ function SetTargetCredentials(t, user, pass)
 end
 
 function SetTargetAuthFailed(t, failed)
+	if failed then t.authFailedAt = os.time() end
 	if t.authFailed == failed then return end
 	t.authFailed = failed
 	if failed then
 		LogError("Login failed for '%s' on %s - check the username and password", t.user, t.name or t.host)
 	end
 	if t.onAuthChange then pcall(t.onAuthChange, t, failed) end
+end
+
+-- A refused login long enough ago to try once more
+function TargetLoginRetryDue(t)
+	return t.authFailed == true and os.time() - (t.authFailedAt or 0) >= AUTH_RETRY_S
 end
 
 function TargetBaseUrl(t, withCredentials)
@@ -195,7 +205,7 @@ IsapiNow = function(t, method, path, body, cb, opts)
 			cb(nil, nil, "username not set")
 			return
 		end
-		if t.authFailed and not opts.force then
+		if t.authFailed and not opts.force and not TargetLoginRetryDue(t) then
 			cb(nil, nil, "login failed earlier (fix the username/password)")
 			return
 		end

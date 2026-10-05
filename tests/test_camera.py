@@ -414,6 +414,55 @@ note = [l for l in printed if l.startswith("Snapshot notification")]
 check(note and "/102/picture" in note[0] and "640x360" in note[0], f"Test Snapshot checks the picture notifications really use ({note})")
 check(any(l.startswith("Snapshot resize: the camera ignores") for l in printed), "Test Snapshot says the camera ignores the requested size")
 
+# ---------------------------------------------------------------- a camera that refuses the login while starting, or reboots
+def tick(d):
+    """Run the repeating timers once (health check, watchdog)."""
+    d.run("for _, t in ipairs(TIMERS) do if t.active and t.rep then t.fn(t) end end")
+
+
+state = {"starting": True, "down": False, "fw": "V5.7.15"}
+inner = camera()
+
+
+def starting_camera(method, url, headers, body):
+    if state["down"]:
+        return None, None, None
+    if state["starting"]:   # the web server answers before the accounts are ready: every login is refused
+        return 401, {"WWW-Authenticate": f'Digest realm="{REALM}", qop="auth", nonce="{NONCE}", stale="FALSE"'}, ""
+    if url.endswith("/ISAPI/System/deviceInfo") and digest_ok(method, headers.get("Authorization")):
+        return 200, {}, (f"<DeviceInfo {NS}><deviceName>Garden</deviceName><model>DS-2CD2087G2-L</model><firmwareVersion>{state['fw']}</firmwareVersion>"
+                         "<firmwareReleasedDate>build 260320</firmwareReleasedDate><deviceType>IPCamera</deviceType></DeviceInfo>")
+    return inner(method, url, headers, body)
+
+
+d = started(starting_camera)
+d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.81", "USERNAME": USER, "PASSWORD": PASS}))
+d.timers()
+check(d.prop("Status").startswith("Login failed"), f"a camera still starting refuses the login ({d.prop('Status')})")
+state["starting"] = False
+d.clear()
+tick(d)
+check(not [e for e in d.g.HTTP_LOG.values() if e["auth"]], "right after: no new login attempt (lockout protection)")
+d.run("gCam.authFailedAt = os.time() - AUTH_RETRY_S")
+tick(d); d.timers()
+check(d.prop("Status").startswith("Online"), f"15 minutes later the login is tried once more and works ({d.prop('Status')})")
+
+state["down"] = True    # firmware upgrade: the camera reboots
+tick(d); tick(d)
+check(d.prop("Status").startswith("Offline"), f"rebooting camera shown offline ({d.prop('Status')})")
+state["down"], state["fw"] = False, "V5.7.23"
+tick(d); d.timers()
+check("V5.7.23" in d.prop("Camera"), f"back online: firmware and streams read again ({d.prop('Camera')})")
+
+d = started(starting_camera)
+state["starting"] = True
+d.call("ExecuteCommand", "DL_CONFIGURE", d.table({"HUB_ID": "500", "ADDRESS": "192.168.50.81", "USERNAME": USER, "PASSWORD": PASS}))
+d.timers()
+state["starting"] = False
+d.call("ReceivedFromProxy", 5001, "SET_PASSWORD", d.table({"PASSWORD": base64.b64encode(PASS.encode()).decode()}))
+d.timers()
+check(d.prop("Status").startswith("Online"), f"the same password entered again on the camera page is tried again ({d.prop('Status')})")
+
 # ---------------------------------------------------------------- DirectorLink camera agreement v1
 OLD_VARS = ["ONLINE", "ALERTS_ENABLED", "ALERT_ACTIVE", "MOTION", "PERSON", "VEHICLE", "LINE_CROSSING", "INTRUSION", "TAMPER",
             "ALARM_INPUT", "MOTION_DETECTION_ENABLED", "LAST_DETECTION", "LAST_ALERT", "LAST_ALERT_TIME"]

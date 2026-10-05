@@ -57,6 +57,8 @@ local function Login(forRecorder)
 	return Properties["Username"] or "", Properties["Password"] or ""
 end
 
+local UpdateTile, UpdateSummary -- forward (also used when a device's login state changes)
+
 local function TargetFor(ip, port, recorder)
 	local key = ip .. ":" .. tostring(port or 80)
 	local t = gTargets[key]
@@ -101,7 +103,6 @@ end
 --[[=============================================================================
     Alerts (master switch for every camera)
 ===============================================================================]]
-local UpdateTile, UpdateSummary -- forward
 
 local function HubAlertsEnabled()
 	if os.time() < (gHub.snoozeUntil or 0) then return false end
@@ -995,6 +996,29 @@ local function ScheduleUpdateChecks()
 	end
 end
 
+-- Forget refused logins so the next request tries again (Search Network, login entered again)
+local function RetryLogins()
+	for _, t in pairs(gTargets) do SetTargetAuthFailed(t, false) end
+	gLoginFailed = {}
+	UpdateSummary()
+end
+
+-- Every few minutes: a device that refused the login is tried once more when its retry is due
+-- (AUTH_RETRY_S); an NVR that answers again has its channel list read again
+local function RetryFailedLogins()
+	if gState.discovering or next(gLoginFailed) == nil then return end
+	for host in pairs(gLoginFailed) do
+		local d = gFound[host]
+		local t = d and gTargets[d.ip .. ":" .. tostring(d.port or 80)]
+		if t and TargetLoginRetryDue(t) then
+			LogInfo("Trying the login on %s again", host)
+			Isapi(TargetFor(d.ip, d.port, d.recorder), "GET", "/ISAPI/System/deviceInfo", nil, function(code)
+				if code == 200 and d.recorder then ReadRecorderChannels(function() UpdateFoundSummary() end) end
+			end, { timeout = 10 })
+		end
+	end
+end
+
 local function ApplyLoginToAll()
 	local n = 0
 	for id, c in pairs(gCameras) do
@@ -1050,7 +1074,10 @@ local VARIABLES = {
 }
 
 local ACTIONS = {
-	Search = function() StartDiscovery("action") end,
+	Search = function()
+		RetryLogins() -- run by hand: try the login once even if it was refused earlier
+		StartDiscovery("action")
+	end,
 	AddCameras = function() AddNewCameras() end,
 	ApplyLogin = function() ApplyLoginToAll() end,
 	UpdateNames = function() UpdateCameraNames() end,
@@ -1082,6 +1109,7 @@ function OnDriverLateInit()
 	ShowDriverVersion()
 	ScheduleUpdateChecks()
 	if UpdateChecksOn() then SetTimer("UPDATE_CHECK_FIRST", 60000, CheckForUpdates) end
+	SetTimer("LOGIN_RETRY", 5 * 60 * 1000, RetryFailedLogins, true)
 	AlertsChanged("startup")
 	UpdateTile(true)
 	HelloCameras()
@@ -1103,8 +1131,7 @@ function OnPropertyChanged(name)
 		SaveState()
 		AlertsChanged("Composer")
 	elseif name == "Username" or name == "Password" or name == "NVR Username" or name == "NVR Password" then
-		UpdateSummary()
-		gLoginFailed = {}
+		RetryLogins() -- also when the same login is entered again
 		SetTimer("LOGIN_CHANGED", 2000, function()
 			ApplyLoginToAll()
 			StartDiscovery("login changed")

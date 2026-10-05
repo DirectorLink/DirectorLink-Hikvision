@@ -2,6 +2,20 @@
 
 All notable changes to DirectorLink · Hikvision. Each release has fuller notes in [docs/releases](docs/releases).
 
+## 1.1.1 — 2026-10-05
+
+### Hub
+
+- **A refused login is tried again.** A device that refused the login (for example an NVR still starting after a firmware upgrade) is tried once more after 15 minutes, and at once when you run **Search Network** or enter the password again (even the same one). Before, the hub stopped trying until the driver restarted.
+- **Status clears as soon as the login works again** (it used to keep showing "Login failed").
+
+### Camera
+
+- **A refused login is tried again** after 15 minutes, and at once when the same password is entered again on the camera's Properties page or sent by the hub.
+- **After a reboot** (for example a firmware upgrade), the camera driver reads the camera again, so **Camera** shows the new firmware and **Video** the current streams.
+
+Lockout protection stays: a wrong password costs one attempt, then at most one more every 15 minutes, far below the cameras' lockout limits.
+
 ## 1.1.0 — 2026-10-05
 
 ### Camera
