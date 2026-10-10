@@ -1846,12 +1846,15 @@ local VARIABLES = {
 	-- intercom, if ever supported, would set KIND = "doorbell", LAST_RING (ISO 8601 UTC) and fire "Ring".
 	{ "DIRECTORLINK_CAMERA", "1", "STRING" },
 	{ "DIRECTORLINK_CAMERA_KIND", "camera", "STRING" },
+	-- Name=id of the events DirectorLink listens to, so it needs no driver.xml (id of "Alert" in driver.xml)
+	{ "DIRECTORLINK_CAMERA_EVENTS", "Alert=1", "STRING" },
 }
 
 -- Written on every start, so they are right after a driver update too
 local function SetAgreementVariables()
 	SetVar("DIRECTORLINK_CAMERA", "1", true)
 	SetVar("DIRECTORLINK_CAMERA_KIND", "camera", true)
+	SetVar("DIRECTORLINK_CAMERA_EVENTS", "Alert=1", true)
 end
 
 function OnDriverInit(dit)

@@ -43,7 +43,7 @@
   </div>
 </div>
 <main>
-<div class="links">Free. No subscription, no license key, no account with us. Downloads, updates and help: see the address above.</div>
+<div class="links">Free. No subscription, no license key, no account with us. Downloads, updates and help: see the address above.<br>DirectorLink is an independent project, not affiliated with Control4 or Snap One.</div>
 
 <h2>Setup</h2>
 <p class="note"><b>Several cameras?</b> Use the <b>DirectorLink &middot; Hikvision</b> driver (the Hikvision Hub): it finds all cameras, adds them with this driver and configures them with one login. Nothing needs to be entered here.</p>
@@ -97,7 +97,7 @@
 <h3>Events</h3>
 <p>Alert, Motion Detected, Motion Ended, Person Detected, Vehicle Detected, Line Crossing, Intrusion Detected, Region Entrance, Region Exiting, Tamper Detected, Scene Change Detected, Face Detected, Object Left Behind, Object Removed, Alarm Input Active, Alarm Input Inactive, PIR Alarm, Camera Online, Camera Offline, Alerts On, Alerts Off.</p>
 <h3>Variables</h3>
-<p><code>ONLINE</code>, <code>ALERTS_ENABLED</code>, <code>ALERT_ACTIVE</code>, <code>MOTION</code>, <code>PERSON</code>, <code>VEHICLE</code>, <code>LINE_CROSSING</code>, <code>INTRUSION</code>, <code>TAMPER</code>, <code>ALARM_INPUT</code>, <code>MOTION_DETECTION_ENABLED</code> (BOOL); <code>LAST_DETECTION</code>, <code>LAST_ALERT</code>, <code>LAST_ALERT_TIME</code>, <code>DIRECTORLINK_CAMERA</code> (always 1), <code>DIRECTORLINK_CAMERA_KIND</code> (camera) (STRING). The last two let the DirectorLink app (1.10 and later) recognize the camera.</p>
+<p><code>ONLINE</code>, <code>ALERTS_ENABLED</code>, <code>ALERT_ACTIVE</code>, <code>MOTION</code>, <code>PERSON</code>, <code>VEHICLE</code>, <code>LINE_CROSSING</code>, <code>INTRUSION</code>, <code>TAMPER</code>, <code>ALARM_INPUT</code>, <code>MOTION_DETECTION_ENABLED</code> (BOOL); <code>LAST_DETECTION</code>, <code>LAST_ALERT</code>, <code>LAST_ALERT_TIME</code>, <code>DIRECTORLINK_CAMERA</code> (always 1), <code>DIRECTORLINK_CAMERA_KIND</code> (camera), <code>DIRECTORLINK_CAMERA_EVENTS</code> (Alert=1, the id of the Alert event) (STRING). The last three let the DirectorLink app (1.10 and later) recognize the camera and find its alerts.</p>
 <h3>Conditionals</h3>
 <p>Camera is Online/Offline &middot; Alerts are On/Off &middot; Alert is Active/Clear &middot; Motion is Active/Idle &middot; Active detection is/is not &lt;type&gt; &middot; Last alert is/is not &lt;type&gt;.</p>
 <h3>Commands</h3>
@@ -110,6 +110,7 @@
 <h2>Change log</h2>
 <table>
   <tr><th>Version</th><th>Changes</th></tr>
+  <tr><td>1.1.2</td><td>New variable DIRECTORLINK_CAMERA_EVENTS (Alert=1), so DirectorLink finds the camera's alerts without reading driver.xml.</td></tr>
   <tr><td>1.1.1</td><td>A refused login is tried again after 15 minutes or when the same password is entered again; after a reboot (firmware upgrade) the camera is read again.</td></tr>
   <tr><td>1.1.0</td><td>DirectorLink camera agreement v1: DIRECTORLINK_CAMERA and DIRECTORLINK_CAMERA_KIND variables; LAST_ALERT only carries the agreement's labels; more Hikvision detections map to the nearest one; Last alert is also offers Animal, Package and License Plate.</td></tr>
   <tr><td>1.0.6</td><td>Version number only (the hub's update check changed).</td></tr>

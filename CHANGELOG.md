@@ -2,6 +2,16 @@
 
 All notable changes to DirectorLink · Hikvision. Each release has fuller notes in [docs/releases](docs/releases).
 
+## 1.1.2 — 2026-10-10
+
+### Camera
+
+- New string variable **`DIRECTORLINK_CAMERA_EVENTS`** = `Alert=1`: the id of the *Alert* event, so DirectorLink finds the camera's alerts without reading driver.xml. It comes after the existing variables (their order never changes) and is set on every start, like `DIRECTORLINK_CAMERA` and `DIRECTORLINK_CAMERA_KIND`.
+
+### Hub
+
+- No changes apart from the version number.
+
 ## 1.1.1 — 2026-10-05
 
 ### Hub

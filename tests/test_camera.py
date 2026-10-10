@@ -1,10 +1,11 @@
 """Camera driver tests (offline).   python tests/test_camera.py"""
 import base64
+import os
 import hashlib
 import re
 import xml.etree.ElementTree as ET
 
-from harness import Driver, check, finish
+from harness import ROOT, Driver, check, finish
 
 NS = 'xmlns="http://www.hikvision.com/ver20/XMLSchema"'
 USER, PASS = "admin", "Secr3t!pw"
@@ -468,16 +469,21 @@ OLD_VARS = ["ONLINE", "ALERTS_ENABLED", "ALERT_ACTIVE", "MOTION", "PERSON", "VEH
             "ALARM_INPUT", "MOTION_DETECTION_ENABLED", "LAST_DETECTION", "LAST_ALERT", "LAST_ALERT_TIME"]
 d = started(camera())
 check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "agreement variables set at init")
-check(list(d.g.VAR_ORDER.values()) == OLD_VARS + ["DIRECTORLINK_CAMERA", "DIRECTORLINK_CAMERA_KIND"],
+check(list(d.g.VAR_ORDER.values()) == OLD_VARS + ["DIRECTORLINK_CAMERA", "DIRECTORLINK_CAMERA_KIND", "DIRECTORLINK_CAMERA_EVENTS"],
       "agreement variables come after the existing ones (variable order unchanged)")
+xml_events = {e.findtext("name"): e.findtext("id") for e in ET.parse(os.path.join(ROOT, "src", "camera", "driver.xml")).getroot().findall("events/event")}
+check(d.var("DIRECTORLINK_CAMERA_EVENTS") == "Alert=" + xml_events["Alert"] == "Alert=1",
+      f"DIRECTORLINK_CAMERA_EVENTS names the Alert event by its driver.xml id ({d.var('DIRECTORLINK_CAMERA_EVENTS')})")
 
 d = Driver("camera", camera())   # a driver update: new Lua state, Director keeps the variables and their values
-d.run('VARS["DIRECTORLINK_CAMERA"] = "0"; VARS["DIRECTORLINK_CAMERA_KIND"] = "doorbell"')
+d.run('VARS["DIRECTORLINK_CAMERA"] = "0"; VARS["DIRECTORLINK_CAMERA_KIND"] = "doorbell"; VARS["DIRECTORLINK_CAMERA_EVENTS"] = "Alert=99"')
 d.call("OnDriverInit", "DIT_UPDATING")
-check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "agreement variables corrected at init after an update")
-d.run('VARS["DIRECTORLINK_CAMERA_KIND"] = "x"')
+check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera" and d.var("DIRECTORLINK_CAMERA_EVENTS") == "Alert=1",
+      "agreement variables corrected at init after an update")
+d.run('VARS["DIRECTORLINK_CAMERA_KIND"] = "x"; VARS["DIRECTORLINK_CAMERA_EVENTS"] = ""')
 d.run("OnDriverLateInit('DIT_UPDATING')")
-check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera", "... and kept when the driver finishes starting")
+check(d.var("DIRECTORLINK_CAMERA") == "1" and d.var("DIRECTORLINK_CAMERA_KIND") == "camera" and d.var("DIRECTORLINK_CAMERA_EVENTS") == "Alert=1",
+      "... and kept when the driver finishes starting")
 
 ALLOWED = {"Person", "Vehicle", "Face", "Motion", "Line Crossing", "Intrusion", "Region Entrance", "Region Exiting", "Tamper",
            "Scene Change", "Object Left", "Object Removed", "Alarm Input", "PIR", "Animal", "Package", "License Plate"}
